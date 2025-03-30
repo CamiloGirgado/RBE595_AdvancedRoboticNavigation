@@ -167,11 +167,8 @@ camera_matrix = np.array([
 ], dtype=np.float32)
 
 dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
-
 tag_corners_world = generate_tag_corners()
-
 data_folder = "/home/camilo/dev/RBE_595_ARN/data"  # Updated to correct folder path
-
 estimated_positions, estimated_orientations, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
 
 if estimated_positions is not None and estimated_positions.size > 0:
@@ -180,8 +177,8 @@ if estimated_positions is not None and estimated_positions.size > 0:
     R_matrix = compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations)
     print("Covariance Matrix:\n", R_matrix)
 else:
-
     print("No valid estimated positions found.")
+
 def test_april_tags(tag_ids, tag_corners_world):
     """Prints the world coordinates of multiple AprilTags."""
     for tag_id in tag_ids:
