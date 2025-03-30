@@ -66,14 +66,24 @@ def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
     if not success:
         return None, None
     
+    #Convert rotation vector to rotation matrix
     R_cam_to_world, _ = cv2.Rodrigues(rvec)
+
+    # Apply translation vector
     t_camera_to_robot = np.array([-0.04, 0, -0.03]).reshape(3, 1)
     R_x = R.from_euler('x', np.pi).as_matrix()
     R_z = R.from_euler('z', np.pi / 4).as_matrix()
+
+    # Combine rotations
     R_cam_to_robot = R_x @ R_z
+
+    #Convert the camera pose to the drone phrase
     R_world_to_robot = R_cam_to_robot @ R_cam_to_world
     t_robot = R_cam_to_robot @ tvec + t_camera_to_robot
+
+    # Convert rotation matrix to Euler Angles
     euler_angles = R.from_matrix(R_world_to_robot).as_euler('xyz')
+
     return t_robot.flatten(), euler_angles
 
 def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
