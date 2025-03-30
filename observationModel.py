@@ -141,11 +141,27 @@ def plot_euler_angles(estimated_orientations, true_orientations):
     plt.suptitle('Euler Angles Comparison')
     plt.show()
 
+#def compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations):
+#    """Computes covariance matrix of observation noise."""
+#    residuals = np.hstack((true_positions - estimated_positions, true_orientations - estimated_orientations))
+##    R_matrix = np.cov(residuals.T)
+#    return R_matrix
+
 def compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations):
     """Computes covariance matrix of observation noise."""
+    
+    min_length = min(len(estimated_positions), len(true_positions))
+    
+    estimated_positions = estimated_positions[:min_length]
+    true_positions = true_positions[:min_length]
+    estimated_orientations = estimated_orientations[:min_length]
+    true_orientations = true_orientations[:min_length]
+    
     residuals = np.hstack((true_positions - estimated_positions, true_orientations - estimated_orientations))
     R_matrix = np.cov(residuals.T)
+    
     return R_matrix
+
 
 # Main execution
 camera_matrix = np.array([
@@ -154,7 +170,7 @@ camera_matrix = np.array([
     [0, 0, 1]
 ], dtype=np.float32)
 
-dist_coeffs = np.array([-0.438607, 0.248625, -0.0911, 0.00072, -0.000476], dtype=np.float32)
+dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
 
 tag_corners_world = generate_tag_corners()
 
@@ -171,3 +187,7 @@ if estimated_positions is not None and estimated_positions.size > 0:
     print("Covariance Matrix:\n", R_matrix)
 else:
     print("No valid estimated positions found.")
+
+
+tag_id_to_test = 10  # Change this to the tag ID you want to inspect
+print(f"AprilTag {tag_id_to_test} Coordinates:\n", tag_corners_world.get(tag_id_to_test, "Tag ID not found"))
