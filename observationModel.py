@@ -5,7 +5,48 @@ import matplotlib.pyplot as plt
 import os
 from scipy.spatial.transform import Rotation as R
 
+# #Go1
+# def generate_tag_corners():
+#     """Generates the world coordinates for AprilTag corners in a 12x9 grid."""
+ 
+#     tag_size = 0.152  # Size of each AprilTag
+#     spacing = 0.152   # Default spacing between tags
+#     extra_spacing_cols = {2: 0.178, 5: 0.178}  # Extra spacing applies between columns 2-3 and 5-6
+ 
+#     tag_corners_world = {}
+ 
+#     # Starting position for the first tag
+#     x_offset = 0
+#     y_offset = 0
+ 
+#     for row in range(12):  # 12 rows (down direction, x direction)
+#         for col in range(9):  # 9 columns (right direction, y direction)
+#             tag_id = row * 9 + col  # Compute tag ID (row-major order)
+ 
+#             # Define the coordinates for the tag corners (bottom-left, bottom-right, top-right, top-left)
+#             p1 = np.array([x_offset + tag_size, y_offset, 0])  # Bottom-left (x, y, z)
+#             p2 = np.array([x_offset + tag_size, y_offset + tag_size, 0])  # Bottom-right (x + tag_size, y)
+#             p3 = np.array([x_offset, y_offset + tag_size, 0])  # Top-right (x, y + tag_size)
+#             p4 = np.array([x_offset, y_offset, 0])  # Top-left (x, y)
+ 
+#             tag_corners_world[tag_id] = np.array([p1, p2, p3, p4])
+ 
+#             # Move to the next column (right direction)
+#             y_offset += tag_size + spacing
+ 
+#             # Apply extra spacing between columns 2-3 and 5-6 (0-indexed)
+#             if col == 2 or col == 5:
+#                 y_offset += extra_spacing_cols.get(col, 0)
+ 
+#         # Move to the next row (down direction)
+#         x_offset += tag_size + spacing
+ 
+#         # Reset the y_offset to the beginning for each row
+#         y_offset = 0
+ 
+#     return tag_corners_world
 
+# Go2
 # def generate_tag_corners(): 
 #     """Generates the world coordinates for AprilTag corners in a 12x9 grid."""
 #     tag_size = 0.152  # Size of each AprilTag
@@ -40,20 +81,54 @@ from scipy.spatial.transform import Rotation as R
 
 #     return tag_corners_world
 
+#Go3
+# def generate_tag_corners():
+#     """Generates the world coordinates for AprilTag corners in a 12x9 grid."""
+    
+#     tag_size = 0.152  # Size of each AprilTag
+#     spacing = 0.152   # Default spacing between tags
+
+#     # Extra spacing applies between columns 3-4 and 6-7 (0-indexed)
+#     extra_spacing_cols = {3: 0.178 - spacing, 6: 0.178 - spacing}
+
+#     tag_corners_world = {}
+
+#     for row in range(12):  # Rows go down (x-direction)
+#         x = row * (tag_size + spacing)
+
+#         for col in range(9):  # Columns go right (y-direction)
+#             y = 0
+#             for c in range(col):
+#                 y += tag_size
+#                 if c in extra_spacing_cols:
+#                     y += extra_spacing_cols[c]
+#                 else:
+#                     y += spacing
+
+#             # Define the four corners in world frame: P1 to P4
+#             P1 = np.array([x + tag_size, y, 0])            # Bottom-left
+#             P2 = np.array([x + tag_size, y + tag_size, 0]) # Bottom-right
+#             P3 = np.array([x, y + tag_size, 0])            # Top-right
+#             P4 = np.array([x, y, 0])                       # Top-left
+
+#             tag_id = row * 9 + col  # Row-major order
+#             tag_corners_world[tag_id] = np.array([P1, P2, P3, P4])
+
+#     return tag_corners_world
+
 def generate_tag_corners():
     """Generates the world coordinates for AprilTag corners in a 12x9 grid."""
-    
     tag_size = 0.152  # Size of each AprilTag
     spacing = 0.152   # Default spacing between tags
-
+ 
     # Extra spacing applies between columns 3-4 and 6-7 (0-indexed)
     extra_spacing_cols = {3: 0.178 - spacing, 6: 0.178 - spacing}
-
+ 
     tag_corners_world = {}
-
+ 
     for row in range(12):  # Rows go down (x-direction)
         x = row * (tag_size + spacing)
-
+ 
         for col in range(9):  # Columns go right (y-direction)
             y = 0
             for c in range(col):
@@ -62,16 +137,16 @@ def generate_tag_corners():
                     y += extra_spacing_cols[c]
                 else:
                     y += spacing
-
+ 
             # Define the four corners in world frame: P1 to P4
             P1 = np.array([x + tag_size, y, 0])            # Bottom-left
             P2 = np.array([x + tag_size, y + tag_size, 0]) # Bottom-right
             P3 = np.array([x, y + tag_size, 0])            # Top-right
             P4 = np.array([x, y, 0])                       # Top-left
-
-            tag_id = row * 9 + col  # Row-major order
+ 
+            tag_id = col * 12 + row  # Row-major order
             tag_corners_world[tag_id] = np.array([P1, P2, P3, P4])
-
+ 
     return tag_corners_world
 
 def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
@@ -231,4 +306,4 @@ def test_april_tags(tag_ids, tag_corners_world):
         else:
             print(f"AprilTag {tag_id} not found!\n")
 
-test_april_tags([0, 49, 61, 73], tag_corners_world)  # Change IDs as needed
+test_april_tags([0, 1, 61, 73], tag_corners_world)  # Change IDs as needed
