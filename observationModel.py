@@ -115,22 +115,22 @@ def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
         dataset = data['data']
         time_stamps = data['time']
         vicon = data['vicon']
-        true_positions.extend(vicon[:, :3])
-        true_orientations.extend(vicon[:, 2:5])
+        true_positions.extend(vicon[0:3, :])
+        true_orientations.extend(vicon[3:5, :])
 
         for entry in dataset:
             position, orientation = estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
             if position is not None:
                 estimated_positions.append(position)
                 estimated_orientations.append(orientation)
-
+        break
     return np.array(estimated_positions), np.array(estimated_orientations), np.array(true_positions), np.array(true_orientations)
 
 def plot_trajectory(estimated_positions, true_positions):
     """Plots the estimated trajectory against the ground truth."""
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot(true_positions[:, 0], true_positions[:, 1], true_positions[:, 2], label='Ground Truth')
+    ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
     ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
     ax.legend()
     ax.set_xlabel('X')
@@ -185,8 +185,8 @@ estimated_positions, estimated_orientations, true_positions, true_orientations =
 if estimated_positions is not None and estimated_positions.size > 0:
     plot_trajectory(estimated_positions, true_positions)
     plot_euler_angles(estimated_orientations, true_orientations)
-    R_matrix = compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations)
-    print("Covariance Matrix:\n", R_matrix)
+    # R_matrix = compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations)
+    # print("Covariance Matrix:\n", R_matrix)
 else:
     print("No valid estimated positions found.")
 
