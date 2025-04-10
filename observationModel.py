@@ -100,7 +100,7 @@ def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
     if not mat_files:
         print("No .mat files found in the directory!")
         return None, None, None, None
-
+    mat_files = ['studentdata5.mat']
     for file_name in mat_files:
         file_path = os.path.join(directory, file_name)
         print(f"Loading file: {file_name}")
@@ -116,8 +116,8 @@ def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
         time_stamps = data['time']
         vicon = data['vicon']
         true_positions.extend(vicon[0:3, :])
-        true_orientations.extend(vicon[3:5, :])
-
+        # true_orientations.extend(vicon[3:5, :])
+        true_orientations.extend(np.vstack((vicon[3:6, :],np.array([time_stamps]))))
         for entry in dataset:
             position, orientation = estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
             if position is not None:
@@ -145,7 +145,8 @@ def plot_euler_angles(estimated_orientations, true_orientations):
     plt.figure()
     for i in range(3):
         plt.subplot(3, 1, i + 1)
-        plt.plot(true_orientations[:, i], label='Ground Truth')
+        # plt.plot(true_orientations[:, i].T, label='Ground Truth')
+        plt.plot(true_orientations[-1, :], true_orientations[i, :], label='Ground Truth')
         plt.plot(estimated_orientations[:, i], label='Estimated')
         plt.ylabel(angles[i])
         plt.legend()
