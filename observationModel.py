@@ -77,7 +77,7 @@ def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
     #R_cam_to_robot = R_z @ R_x
 
     #Convert the camera pose to the drone pose
-    R_world_to_robot = -(R_cam_to_world).T @ R_cam_to_robot 
+    R_world_to_robot = (R_cam_to_world) @ R_cam_to_robot 
     #R_world_to_robot =  (R_cam_to_world) @ R_cam_to_robot
     # t_robot = R_cam_to_robot @ tvec + t_camera_to_robot
     t_robot = (-(R_cam_to_world).T @ tvec) + t_camera_to_robot
@@ -116,15 +116,22 @@ def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
         time_stamps = data['time']
         vicon = data['vicon']
         true_positions.extend(vicon[0:3, :])
+        estimated_all = None
         # true_orientations.extend(vicon[3:5, :])
         true_orientations.extend(np.vstack((vicon[3:6, :],np.array([time_stamps]))))
         for entry in dataset:
             position, orientation = estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
             if position is not None:
-                estimated_positions.append(position)
-                estimated_orientations.append(orientation)
+                estimated = np.hstack((position, orientation))
+                estimated = np.hstack((estimated, entry['t']))
+                if estimated_all is None:
+                    estimated_all = estimated
+                else:
+                    estimated_all = np.vstack((estimated_all, estimated))
+                #estimated_positions.append(position)
+                #estimated_orientations.append(orientation)
         break
-    return np.array(estimated_positions), np.array(estimated_orientations), np.array(true_positions), np.array(true_orientations)
+    return estimated_all, np.array(true_positions), np.array(true_orientations)
 
 def plot_trajectory(estimated_positions, true_positions):
     """Plots the estimated trajectory against the ground truth."""
@@ -147,7 +154,7 @@ def plot_euler_angles(estimated_orientations, true_orientations):
         plt.subplot(3, 1, i + 1)
         # plt.plot(true_orientations[:, i].T, label='Ground Truth')
         plt.plot(true_orientations[-1, :], true_orientations[i, :], label='Ground Truth')
-        plt.plot(estimated_orientations[:, i], label='Estimated')
+        plt.plot(estimated_orientations[-1, :], estimated_orientations[i+3, :], label='Estimated')
         plt.ylabel(angles[i])
         plt.legend()
     plt.xlabel('Time')
@@ -160,15 +167,48 @@ def plot_euler_angles(estimated_orientations, true_orientations):
 ##    R_matrix = np.cov(residuals.T)
 #    return R_matrix
 
+#def compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations):
+#    """Computes covariance matrix of observation noise."""
+#    min_length = min(len(estimated_positions), len(true_positions))
+#    estimated_positions = estimated_positions[:min_length]
+#    true_positions = true_positions[:min_length]
+#    estimated_orientations = estimated_orientations[:min_length]
+#    true_orientations = true_orientations[:min_length]
+#    residuals = np.hstack((true_positions - estimated_positions, true_orientations - estimated_orientations))
+#    R_matrix = np.cov(residuals.T)
+#    return R_matrix
+
 def compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations):
-    """Computes covariance matrix of observation noise."""
-    min_length = min(len(estimated_positions), len(true_positions))
-    estimated_positions = estimated_positions[:min_length]
-    true_positions = true_positions[:min_length]
-    estimated_orientations = estimated_orientations[:min_length]
-    true_orientations = true_orientations[:min_length]
-    residuals = np.hstack((true_positions - estimated_positions, true_orientations - estimated_orientations))
+    """Computes the covariance matrix of the observation noise."""
+
+    # Make sure all data is the same length
+    min_length = min(
+        estimated_positions.shape[0],
+        true_positions.shape[1],  # ground truth shape is (3, T)
+        estimated_orientations.shape[0],
+        true_orientations.shape[1]  # ground truth shape is (3, T)
+    )
+
+    # Align the data
+    est_pos = estimated_positions[:min_length]
+    true_pos = true_positions[:, :min_length].T  # Transpose to shape (T, 3)
+
+    est_ori = estimated_orientations[:min_length]
+    true_ori = true_orientations[:3, :min_length].T  # Only roll, pitch, yaw, shape (T, 3)
+
+    # Residuals = true - estimated
+    pos_residuals = true_pos - est_pos
+    ori_residuals = true_ori - est_ori
+
+    # Wrap angles to [-pi, pi] to avoid wraparound issues
+    ori_residuals = (ori_residuals + np.pi) % (2 * np.pi) - np.pi
+
+    # Combine residuals: shape (T, 6)
+    residuals = np.hstack((pos_residuals, ori_residuals))
+
+    # Covariance matrix: shape (6, 6)
     R_matrix = np.cov(residuals.T)
+
     return R_matrix
 
 # Main execution
@@ -181,13 +221,13 @@ camera_matrix = np.array([
 dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
 tag_corners_world = generate_tag_corners()
 data_folder = "/home/camilo/dev/RBE_595_ARN/data"  # Updated to correct folder path
-estimated_positions, estimated_orientations, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
+estimated_data, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
 
-if estimated_positions is not None and estimated_positions.size > 0:
-    plot_trajectory(estimated_positions, true_positions)
-    plot_euler_angles(estimated_orientations, true_orientations)
-    # R_matrix = compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations)
-    # print("Covariance Matrix:\n", R_matrix)
+if estimated_data is not None and estimated_data.size > 0:
+    plot_trajectory(estimated_data, true_positions)
+    plot_euler_angles(estimated_data, true_orientations)
+    #R_matrix = compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations)
+    #print("Covariance Matrix:\n", R_matrix)
 else:
     print("No valid estimated positions found.")
 
