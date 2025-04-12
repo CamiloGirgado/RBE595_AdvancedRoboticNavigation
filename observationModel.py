@@ -11,7 +11,7 @@ def generate_tag_corners():
     spacing = 0.152   # Default spacing between tags
  
     # Extra spacing applies between columns 3-4 and 6-7 (0-indexed)
-    extra_spacing_cols = {3: 0.178 - spacing, 6: 0.178 - spacing}
+    extra_spacing_cols = {3: 0.178, 6: 0.178}
  
     tag_corners_world = {}
  
@@ -20,9 +20,10 @@ def generate_tag_corners():
  
         for col in range(9):  # Columns go right (y-direction)
             y = 0
-            for c in range(col):
+            for c in range(1, col+1):
                 y += tag_size
-                if c in extra_spacing_cols:
+                #if c > 0:
+                if c in extra_spacing_cols.keys():
                     y += extra_spacing_cols[c]
                 else:
                     y += spacing
@@ -44,18 +45,21 @@ def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
     print("Data keys:", data.keys())
     print("ID Type:", type(data['id']))
 
-    if isinstance(data['id'], int) or len(data['id']) == 0:
-
-        return None, None  # No valid tags detected
-    
     obj_points = []
     img_points = []
 
-    for i, tag_id in enumerate(data['id']):
-        if tag_id in tag_corners_world:
-            obj_points.append(tag_corners_world[tag_id])
-            img_points.append(
-                np.array([data['p1'][:, i], data['p2'][:, i], data['p3'][:, i], data['p4'][:, i]]))
+    if isinstance(data['id'], int): # or len(data['id']) == 0:
+        obj_points.append(tag_corners_world[data['id']])
+        img_points.append(
+                np.array([data['p1'], data['p2'], data['p3'], data['p4']]))
+    elif len(data['id']) == 0:
+        return None, None
+    else:
+        for i, tag_id in enumerate(data['id']):
+            if tag_id in tag_corners_world:
+                obj_points.append(tag_corners_world[tag_id])
+                img_points.append(
+                    np.array([data['p1'][:, i], data['p2'][:, i], data['p3'][:, i], data['p4'][:, i]]))
 
     obj_points = np.array(obj_points, dtype=np.float32).reshape(-1, 3)
     img_points = np.array(img_points, dtype=np.float32).reshape(-1, 2)
@@ -83,7 +87,7 @@ def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
     t_robot = (-(R_cam_to_world).T @ tvec) + t_camera_to_robot
 
     # Convert rotation matrix to Euler Angles
-    euler_angles = R.from_matrix(R_world_to_robot).as_euler('xyz')
+    euler_angles = R.from_matrix(R_world_to_robot).as_euler('xyz', degrees = False)
 
     return t_robot.flatten(), euler_angles
 
@@ -239,4 +243,4 @@ def test_april_tags(tag_ids, tag_corners_world):
         else:
             print(f"AprilTag {tag_id} not found!\n")
 
-test_april_tags([0, 1, 61, 73], tag_corners_world)  # Change IDs as needed
+test_april_tags([0, 12, 24, 36, 48, 60, 72, 84, 96], tag_corners_world)  # Change IDs as needed
