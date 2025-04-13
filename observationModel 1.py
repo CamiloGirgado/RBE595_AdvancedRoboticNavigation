@@ -165,22 +165,6 @@ def plot_euler_angles(estimated_orientations, true_orientations):
     plt.suptitle('Euler Angles Comparison')
     plt.show()
 
-#def compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations):
-#    """Computes covariance matrix of observation noise."""
-#    residuals = np.hstack((true_positions - estimated_positions, true_orientations - estimated_orientations))
-##    R_matrix = np.cov(residuals.T)
-#    return R_matrix
-
-#def compute_covariance(estimated_positions, true_positions, estimated_orientations, true_orientations):
-#    """Computes covariance matrix of observation noise."""
-#    min_length = min(len(estimated_positions), len(true_positions))
-#    estimated_positions = estimated_positions[:min_length]
-#    true_positions = true_positions[:min_length]
-#    estimated_orientations = estimated_orientations[:min_length]
-#    true_orientations = true_orientations[:min_length]
-#    residuals = np.hstack((true_positions - estimated_positions, true_orientations - estimated_orientations))
-#    R_matrix = np.cov(residuals.T)
-#    return R_matrix
 def interpolate(time_target,t1, t2,y1, y2):
         """
         Interpolate the data to match the target time.
@@ -218,27 +202,8 @@ def interpolate_data(estimated_all, true_positions):
 def compute_covariance(estimated_all, true_positions, true_orientations):
     """Computes the covariance matrix of the observation noise."""
 
-    # Make sure all data is the same length
-    # min_length = min(
-    #     estimated_positions.shape[0],
-    #     true_positions.shape[1],  # ground truth shape is (3, T)
-    #     estimated_orientations.shape[0],
-    #     true_orientations.shape[1]  # ground truth shape is (3, T)
-    # )
-
-    # Align the data
-    # est_pos = estimated_positions[:min_length]
-    # true_pos = true_positions[:, :min_length].T  # Transpose to shape (T, 3)
-
-    # est_ori = estimated_orientations[:min_length]
-    # true_ori = true_orientations[:3, :min_length].T  # Only roll, pitch, yaw, shape (T, 3)
     true_data = np.vstack((true_positions, true_orientations))
 
-    # # Line up the estimated data with the true data
-    # for idx,x in enumerate(estimated_all):
-    #     if x[1][-1] == true_data[-1, -1]:
-    #         est_data = estimated_all[x[0]:]
-    #         break
     interpolated_data = interpolate_data(estimated_all, true_data)
     if interpolate_data is None:
         return None
@@ -257,22 +222,6 @@ def compute_covariance(estimated_all, true_positions, true_orientations):
         print("Covariance matrix is positive definite!")
     else:
         print("Covariance matrix is not positive definite!")
-        
-    
-    
-    
-    # # Residuals = true - estimated
-    # pos_residuals = true_pos - est_pos
-    # ori_residuals = true_ori - est_ori
-
-    # # Wrap angles to [-pi, pi] to avoid wraparound issues
-    # ori_residuals = (ori_residuals + np.pi) % (2 * np.pi) - np.pi
-
-    # # Combine residuals: shape (T, 6)
-    # residuals = np.hstack((pos_residuals, ori_residuals))
-
-    # # Covariance matrix: shape (6, 6)
-    # R_matrix = np.cov(residuals.T)
 
     return R_matrix
 
@@ -285,7 +234,7 @@ camera_matrix = np.array([
 
 dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
 tag_corners_world = generate_tag_corners()
-data_folder = "/home/mind/dev/rbe/AdvNav_PerspectiveNPointObservationModel/data/data"  # Updated to correct folder path
+data_folder = "/home/camilo/dev/RBE_595_ARN/data"  # Updated to correct folder path
 estimated_data, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
 
 if estimated_data is not None and estimated_data.size > 0:
