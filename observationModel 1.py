@@ -104,7 +104,7 @@ def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
     if not mat_files:
         print("No .mat files found in the directory!")
         return None, None, None, None
-    mat_files = ['studentdata5.mat']
+    mat_files = ['studentdata6.mat']
     for file_name in mat_files:
         file_path = os.path.join(directory, file_name)
         print(f"Loading file: {file_name}")
