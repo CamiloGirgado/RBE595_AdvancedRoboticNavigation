@@ -1,162 +1,256 @@
 import numpy as np
+import cv2
+import scipy.io
 import matplotlib.pyplot as plt
+from scipy.spatial.transform import Rotation as R
+import os
 
-# ------------------------- Initialization ----------------------------
+R_meas = np.diag([0.1, 0.1, 0.1, 0.05, 0.05, 0.05])
+g = np.array([0, 0 -9.81]) # Gravity Vector
+Q = np.diag([0.01 * 9 + [0.001] * 6])
 
-# State vector: [position, orientation, velocity, gyroscope bias, accelerometer bias]
-# 15-state: [px, py, pz, φ, θ, ψ, ṗx, ṗy, ṗz, bgx, bgy, bgz, bax, bay, baz]
-state = np.zeros(15)
+# -------------------- Generate AprilTag Corners --------------------
+def generate_tag_corners():
+    """Generates world coordinates for AprilTag corners in a 12x9 grid."""
+    tag_size = 0.152  # Size of each AprilTag
+    spacing = 0.152   # Default spacing between tags
+    extra_spacing_cols = {3: 0.178, 6: 0.178}  # Extra spacing between columns
 
-# Process noise covariance (initial guess)
-Q = np.diag([0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001])
+    tag_corners_world = {}
+    for row in range(12):
+        x = row * (tag_size + spacing)
+        for col in range(9):
+            y = sum(tag_size + (extra_spacing_cols.get(c, spacing) if c in extra_spacing_cols else spacing)
+                    for c in range(col))
+            P1 = np.array([x + tag_size, y, 0])  # Bottom-left
+            P2 = np.array([x + tag_size, y + tag_size, 0])  # Bottom-right
+            P3 = np.array([x, y + tag_size, 0])  # Top-right
+            P4 = np.array([x, y, 0])  # Top-left
+            tag_id = col * 12 + row
+            tag_corners_world[tag_id] = np.array([P1, P2, P3, P4])
+    return tag_corners_world
 
-# Measurement noise covariance (based on previous assignment)
-R = np.diag([0.1, 0.1, 0.1, 0.05, 0.05, 0.05])  # Assuming position (3) and orientation (3) measurements
+def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
+    """Estimates the position and orientation of the quadrotor."""
+    # Debugging: Check structure
+    print("Data keys:", data.keys())
+    print("ID Type:", type(data['id']))
 
-# Initial uncertainty (covariance matrix for state vector)
-P = np.eye(15) * 0.1  # Start with some uncertainty in the initial state estimate
+    obj_points = []
+    img_points = []
 
-# Particle filter setup
-num_particles = 1000
-particles = np.random.randn(num_particles, 15)  # Initial particle distribution
-weights = np.ones(num_particles) / num_particles  # Equal initial weights
+    if isinstance(data['id'], int): # or len(data['id']) == 0:
+        obj_points.append(tag_corners_world[data['id']])
+        img_points.append(
+                np.array([data['p1'], data['p2'], data['p3'], data['p4']]))
+    elif len(data['id']) == 0:
+        return None, None
+    else:
+        for i, tag_id in enumerate(data['id']):
+            if tag_id in tag_corners_world:
+                obj_points.append(tag_corners_world[tag_id])
+                img_points.append(
+                    np.array([data['p1'][:, i], data['p2'][:, i], data['p3'][:, i], data['p4'][:, i]]))
 
-# ---------------------- Process Model (State Transition) ----------------------
+    obj_points = np.array(obj_points, dtype=np.float32).reshape(-1, 3)
+    img_points = np.array(img_points, dtype=np.float32).reshape(-1, 2)
+    success, rvec, tvec = cv2.solvePnP(obj_points, img_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
 
+    if not success:
+        return None, None
+    
+    #Convert rotation vector to rotation matrix
+    R_cam_to_world, _ = cv2.Rodrigues(rvec)
+
+    # Apply translation vector
+    t_camera_to_robot = np.array([-0.04, 0, -0.03]).reshape(3, 1)
+    R_x = R.from_euler('x', np.pi).as_matrix()
+    R_z = R.from_euler('z', np.pi / 4).as_matrix()
+
+    # Combine rotations
+    R_cam_to_robot = R_x @ R_z
+    #R_cam_to_robot = R_z @ R_x
+
+    #Convert the camera pose to the drone pose
+    R_world_to_robot = (R_cam_to_world) @ R_cam_to_robot 
+    #R_world_to_robot =  (R_cam_to_world) @ R_cam_to_robot
+    # t_robot = R_cam_to_robot @ tvec + t_camera_to_robot
+    t_robot = (-(R_cam_to_world).T @ tvec) + t_camera_to_robot
+
+    # Convert rotation matrix to Euler Angles
+    euler_angles = R.from_matrix(R_world_to_robot).as_euler('xyz', degrees = False)
+
+    return t_robot.flatten(), euler_angles
+
+# -------------------- Process Model --------------------
 def process_model(state, u_ω, u_a, g, dt):
-    p = state[:3]  # position
-    q = state[3:6]  # orientation (Euler angles: φ, θ, ψ)
-    v = state[6:9]  # velocity
-    bg = state[9:12]  # gyroscope bias
-    ba = state[12:]  # accelerometer bias
+    """Defines the process model for the quadcopter's state."""
+    p = state[:3]   # Position
+    q = state[3:6]  # Orientation (Euler angles)
+    v = state[6:9]  # Velocity
+    ba = state[12:]  # Accelerometer bias
 
     # Rotation matrix from Euler angles
-    R = np.array([
-        [np.cos(q[2]) * np.cos(q[1]), np.cos(q[2]) * np.sin(q[1]) * np.sin(q[0]) - np.sin(q[2]) * np.cos(q[0]), np.cos(q[2]) * np.sin(q[1]) * np.cos(q[0]) + np.sin(q[2]) * np.sin(q[0])],
-        [np.sin(q[2]) * np.cos(q[1]), np.sin(q[2]) * np.sin(q[1]) * np.sin(q[0]) + np.cos(q[2]) * np.cos(q[0]), np.sin(q[2]) * np.sin(q[1]) * np.cos(q[0]) - np.cos(q[2]) * np.sin(q[0])],
-        [-np.sin(q[1]), np.cos(q[1]) * np.sin(q[0]), np.cos(q[1]) * np.cos(q[0])]
+    R_matrix = np.array([
+        [np.cos(q[2]) * np.cos(q[1]), -np.sin(q[2]), -np.cos(q[2]) * np.sin(q[1])],
+        [np.sin(q[2]) * np.cos(q[1]), np.cos(q[2]), -np.sin(q[2]) * np.sin(q[1])],
+        [-np.sin(q[1]), 0, np.cos(q[1])]
     ])
 
-    # Process model
-    p_dot = v  # velocity is the derivative of position
-    v_dot = R.dot(u_a - ba) - g  # acceleration model (subtract gravity, apply accelerometer bias)
-    bg_dot = np.zeros(3)  # Gyroscope bias drift (assumed to be small noise)
-    ba_dot = np.zeros(3)  # Accelerometer bias drift (assumed to be small noise)
-
-    # Return state derivative
-    state_dot = np.concatenate([p_dot, v_dot, bg_dot, ba_dot])
-
+    # Derivatives
+    p_dot = v  # Velocity is the derivative of position
+    v_dot = R_matrix @ (u_a - ba) - g  # Corrected acceleration
+    state_dot = np.concatenate([p_dot, np.zeros(3), v_dot, np.zeros(6)])  # Assume biases are constant
     return state_dot
 
-# -------------------------- Measurement Model ----------------------------
-
+# -------------------- Measurement Model --------------------
 def measurement_model(state):
-    p = state[:3]  # position
-    q = state[3:6]  # orientation
-    z = np.concatenate([p, q])  # measurement vector (position and orientation)
-    return z
+    """Maps the state to the measurement space."""
+    p = state[:3]   # Position
+    q = state[3:6]  # Orientation (Euler angles)
+    return np.concatenate([p, q])
 
-# ------------------------- Nonlinear Kalman Filter (EKF) ---------------------
+# -------------------- Compute Angular Velocity --------------------
+def compute_angular_velocity(orientations, dt):
+    """Computes angular velocity from Euler angles using finite differences."""
+    omega = np.zeros_like(orientations)
+    omega[1:] = (orientations[1:] - orientations[:-1]) / dt
+    return omega
 
+# -------------------- Compute Linear Acceleration --------------------
+def compute_linear_acceleration(positions, dt):
+    """Computes linear acceleration from position using finite differences."""
+    velocity = np.zeros_like(positions)
+    acceleration = np.zeros_like(positions)
+    
+    velocity[1:] = (positions[1:] - positions[:-1]) / dt  # First derivative
+    acceleration[1:] = (velocity[1:] - velocity[:-1]) / dt  # Second derivative
+    
+    return acceleration
+
+# -------------------- Process Data --------------------
+def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
+    """Processes all .mat files in the given directory and estimates pose."""
+    true_positions = []
+    true_orientations = []
+
+    # List all MAT files in the folder
+    mat_files = [f for f in os.listdir(directory) if f.endswith('.mat')]
+
+    if not mat_files:
+        print("No .mat files found in the directory!")
+        return None, None, None, None
+    mat_files = ['studentdata6.mat']
+    for file_name in mat_files:
+        file_path = os.path.join(directory, file_name)
+        print(f"Loading file: {file_name}")
+        data = scipy.io.loadmat(file_path, simplify_cells=True)
+        # Debugging: Print the structure of the .mat file
+        print(f"Structure of {file_name}:", data.keys())
+        if 'data' not in data or 'time' not in data or 'vicon' not in data:
+
+            print(f"Skipping {file_name} due to missing keys!")
+
+            continue
+        dataset = data['data']
+        time_stamps = data['time']
+        vicon = data['vicon']
+        true_positions.extend(vicon[0:3, :])
+        estimated_all = None
+        # true_orientations.extend(vicon[3:5, :])
+        true_orientations.extend(np.vstack((vicon[3:6, :],np.array([time_stamps]))))
+        for entry in dataset:
+            position, orientation = estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
+            if position is not None:
+                estimated = np.hstack((position, orientation))
+                estimated = np.hstack((estimated, entry['t']))
+                if estimated_all is None:
+                    estimated_all = estimated
+                else:
+                    estimated_all = np.vstack((estimated_all, estimated))
+                #estimated_positions.append(position)
+                #estimated_orientations.append(orientation)
+        break
+    return estimated_all, np.array(true_positions), np.array(true_orientations)
+
+
+# -------------------- EKF Prediction and Update --------------------
 def ekf_predict(state, P, u_ω, u_a, g, dt):
-    # Predict state based on the process model
-    state_dot = process_model(state, u_ω, u_a, g, dt)
-    state_pred = state + state_dot * dt  # Update state with Euler integration
+    F = np.eye(15)
+    F[0:3, 6:9] = np.eye(3) * dt
+    P_pred = F @ P @ F.T + Q
+    return state + process_model(state, u_ω, u_a, g, dt) * dt, P_pred
 
-    # Calculate the Jacobian of the process model (for EKF)
-    F = np.eye(15)  # Jacobian of the process model (to be computed based on state transition equations)
-
-    # Update covariance
-    P_pred = F @ P @ F.T + Q  # Predict covariance
-
-    return state_pred, P_pred
-
-def ekf_update(state_pred, P_pred, z, R):
-    # Update state using the measurement model
-    H = np.eye(6, 15)  # Measurement Jacobian (3 position, 3 orientation)
-    z_pred = measurement_model(state_pred)  # Predicted measurement
-
-    # Compute Kalman Gain
-    S = H @ P_pred @ H.T + R  # Innovation covariance
-    K = P_pred @ H.T @ np.linalg.inv(S)  # Kalman gain
-
-    # Update state
-    y = z - z_pred  # Innovation (measurement residual)
-    state_updated = state_pred + K @ y
+def ekf_update(state_pred, P_pred, z, R_meas):
+    H = np.eye(6, 15)
+    z_pred = measurement_model(state_pred)
+    S = H @ P_pred @ H.T + R_meas
+    K = P_pred @ H.T @ np.linalg.inv(S)
+    state_updated = state_pred + K @ (z - z_pred)
     P_updated = (np.eye(15) - K @ H) @ P_pred
-
     return state_updated, P_updated
 
-# -------------------------- Particle Filter -------------------------------
+# -------------------- Particle Filter --------------------
 
 def particle_filter_predict(particles, u_ω, u_a, g, dt, Q):
-    # Predict the new state for each particle
-    num_particles = particles.shape[0]
-    predicted_particles = particles.copy()
+    noise = np.random.multivariate_normal(np.zeros(15), Q, size=particles.shape[0])
+    for i in range(particles.shape[0]):
+        particles[i] += process_model(particles[i], u_ω, u_a, g, dt) * dt + noise[i]
+    return particles
 
-    for i in range(num_particles):
-        predicted_particles[i, :] += process_model(particles[i, :], u_ω, u_a, g, dt) * dt
-        noise = np.random.multivariate_normal(np.zeros(15), Q)
-        predicted_particles[i, :] += noise
-
-    return predicted_particles
-
-def particle_filter_update(particles, z, R, weights):
-    # Update particle weights based on the measurement model
-    num_particles = particles.shape[0]
+def particle_filter_update(particles, z, R_meas, weights):
     predicted_measurements = np.array([measurement_model(p) for p in particles])
-
-    # Calculate likelihood of each particle based on the measurement
-    likelihood = np.exp(-0.5 * np.sum((predicted_measurements - z)**2 / np.diag(R), axis=1))
-    weights = weights * likelihood
-    weights /= np.sum(weights)  # Normalize weights
-
+    likelihood = np.exp(-0.5 * np.sum((predicted_measurements - z)**2 / np.diag(R_meas), axis=1))
+    weights *= likelihood
+    weights /= np.sum(weights)
     return weights
 
 def low_variance_resampling(particles, weights):
-    # Resample particles based on their weights
     cumulative_weights = np.cumsum(weights)
-    random_values = np.random.rand(particles.shape[0])
-    resampled_particles = particles[np.searchsorted(cumulative_weights, random_values)]
+    random_values = np.random.rand(weights.size)
+    indices = np.searchsorted(cumulative_weights, random_values)
+    return particles[indices]
 
-    return resampled_particles
-
-# ---------------------------- RMSE Calculation ---------------------------
-
-def rmse(estimated_positions, true_positions):
-    return np.sqrt(np.mean(np.sum((estimated_positions - true_positions)**2, axis=1)))
-
-# ---------------------------- Visualization -----------------------------
-
-def plot_trajectory(true_positions, observations, state_estimates, particles):
+# -------------------- Visualization --------------------
+def plot_trajectory(estimated_positions, true_positions):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(true_positions[:, 0], true_positions[:, 1], true_positions[:, 2], color='g', label='Ground Truth')
-    ax.scatter(observations[:, 0], observations[:, 1], observations[:, 2], color='r', label='Observations')
-    ax.scatter(state_estimates[0], state_estimates[1], state_estimates[2], color='b', label='EKF Estimate')
-    ax.scatter(particles[:, 0], particles[:, 1], particles[:, 2], color='y', label='Particle Filter')
+    ax.plot(true_positions[0], true_positions[1], true_positions[2], label='Ground Truth')
+    ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimate')
     ax.legend()
     plt.show()
 
-# ------------------------ Main Loop for Filtering -----------------------
+def plot_euler_angles(estimated_orientations, true_orientations):
+    angles = ['Roll', 'Pitch', 'Yaw']
+    plt.figure()
+    for i in range(3):
+        plt.subplot(3, 1, i + 1)
+        plt.plot(true_orientations[-1], true_orientations[i], label='Ground Truth')
+        plt.plot(estimated_orientations[:, i + 3], label='Estimate')
+        plt.ylabel(angles[i])
+        plt.legend()
+    plt.xlabel('Time')
+    plt.show()
 
-# Assuming you have some form of input data
-measurements = np.load('measurements.npy')  # Replace with actual data
-true_positions = np.load('true_positions.npy')  # Replace with actual data
+# -------------------- Main Execution --------------------
+camera_matrix = np.array([[314.1779, 0, 199.4848], [0, 314.2218, 113.7838], [0, 0, 1]], dtype=np.float32)
+dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
+tag_corners_world = generate_tag_corners()
+data_folder = "/home/camilo/dev/RBE_595_ARN/data"
 
-for t in range(len(measurements)):
-    # Predict step for both Kalman filter and Particle filter
+estimated_positions, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
+
+for t in range(len(estimated_positions)):
+    dt = 0.01  # Assuming a fixed timestep or based on actual timestamps
+    u_ω = compute_angular_velocity(estimated_all, dt)[t]
+    u_a = compute_linear_acceleration(estimated_positions, dt)[t]
+
     state_pred, P_pred = ekf_predict(state, P, u_ω, u_a, g, dt)
-    state_updated, P_updated = ekf_update(state_pred, P_pred, measurements[t], R)
-    
-    # Particle Filter prediction and update
+    state, P = ekf_update(state_pred, P_pred, estimated_positions[t], R_meas)
     particles = particle_filter_predict(particles, u_ω, u_a, g, dt, Q)
-    weights = particle_filter_update(particles, measurements[t], R, weights)
+    weights = particle_filter_update(particles, estimated_positions[t], R_meas, weights)
     particles = low_variance_resampling(particles, weights)
 
-    # RMSE calculation for position
-    rmse_val = rmse(estimated_positions, true_positions)
-
-    # Visualization (3D plot)
-    if t % plot_interval == 0:
-        plot_trajectory(true_positions, observations, state_updated[:3], particles)
+    if t % 10 == 0:
+        plot_trajectory(estimated_positions, true_positions)
+        plot_euler_angles(estimated_positions, true_orientations)
