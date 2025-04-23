@@ -19,19 +19,22 @@ def process_model(state, u_ω, u_a, g, dt):
     v = state[6:9]  # Velocity
     ba = state[12:]  # Accelerometer bias
 
-    # Rotation matrix from Euler angles
-    R_matrix = np.array([
-        [np.cos(q[2]) * np.cos(q[1]), -np.sin(q[2]), -np.cos(q[2]) * np.sin(q[1])],
-        [np.sin(q[2]) * np.cos(q[1]), np.cos(q[2]), -np.sin(q[2]) * np.sin(q[1])],
-        [-np.sin(q[1]), 0, np.cos(q[1])]
-    ])
 
     # Derivatives
     p_dot = v  # Velocity is the derivative of position
     v_dot = R_matrix @ (u_a - ba) - g  # Corrected acceleration
     state_dot = np.concatenate([p_dot, np.zeros(3), v_dot, np.zeros(6)])  # Assume biases are constant
     return state_dot
+def R_matrix(self, data):
+    rpy = data['rpy']
 
+def G_Matrix(self, data):
+    self.rpy = data['rpy']
+    return np.matrix([
+        [np.cos(roll), 0, -np.sin(roll)*np.cos(pitch)],
+        [0, 1, np.sin(pitch)],
+        [np.sin(pitch), 0, np.cos(roll)*np.cos(pitch)],
+    ])
 # -------------------- Measurement Model --------------------
 def measurement_model(state):
     """Maps the state to the measurement space."""
@@ -56,52 +59,6 @@ def compute_linear_acceleration(positions, dt):
     acceleration[1:] = (velocity[1:] - velocity[:-1]) / dt  # Second derivative
     
     return acceleration
-
-# -------------------- Process Data --------------------
-def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
-    """Processes all .mat files in the given directory and estimates pose."""
-    true_positions = []
-    true_orientations = []
-
-    # List all MAT files in the folder
-    mat_files = [f for f in os.listdir(directory) if f.endswith('.mat')]
-
-    if not mat_files:
-        print("No .mat files found in the directory!")
-        return None, None, None, None
-    mat_files = ['studentdata6.mat']
-    for file_name in mat_files:
-        file_path = os.path.join(directory, file_name)
-        print(f"Loading file: {file_name}")
-        data = scipy.io.loadmat(file_path, simplify_cells=True)
-        # Debugging: Print the structure of the .mat file
-        print(f"Structure of {file_name}:", data.keys())
-        if 'data' not in data or 'time' not in data or 'vicon' not in data:
-
-            print(f"Skipping {file_name} due to missing keys!")
-
-            continue
-        dataset = data['data']
-        time_stamps = data['time']
-        vicon = data['vicon']
-        true_positions.extend(vicon[0:3, :])
-        estimated_all = None
-        # true_orientations.extend(vicon[3:5, :])
-        true_orientations.extend(np.vstack((vicon[3:6, :],np.array([time_stamps]))))
-        for entry in dataset:
-            position, orientation = estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
-            if position is not None:
-                estimated = np.hstack((position, orientation))
-                estimated = np.hstack((estimated, entry['t']))
-                if estimated_all is None:
-                    estimated_all = estimated
-                else:
-                    estimated_all = np.vstack((estimated_all, estimated))
-                #estimated_positions.append(position)
-                #estimated_orientations.append(orientation)
-        break
-    return estimated_all, np.array(true_positions), np.array(true_orientations)
-
 
 # -------------------- EKF Prediction and Update --------------------
 def ekf_predict(state, P, u_ω, u_a, g, dt):
