@@ -18,8 +18,7 @@ def process_model(state, u_ω, u_a, g, dt):
     q = state[3:6]  # Orientation (Euler angles)
     v = state[6:9]  # Velocity
     ba = state[12:]  # Accelerometer bias
-
-
+    
     # Derivatives
     p_dot = v  # Velocity is the derivative of position
     v_dot = R_matrix @ (u_a - ba) - g  # Corrected acceleration
