@@ -4,83 +4,12 @@ import scipy.io
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 import os
+from observationModel import process_data
+from observationModel import estimate_pose
 
 R_meas = np.diag([0.1, 0.1, 0.1, 0.05, 0.05, 0.05])
 g = np.array([0, 0 -9.81]) # Gravity Vector
 Q = np.diag([0.01 * 9 + [0.001] * 6])
-
-# -------------------- Generate AprilTag Corners --------------------
-def generate_tag_corners():
-    """Generates world coordinates for AprilTag corners in a 12x9 grid."""
-    tag_size = 0.152  # Size of each AprilTag
-    spacing = 0.152   # Default spacing between tags
-    extra_spacing_cols = {3: 0.178, 6: 0.178}  # Extra spacing between columns
-
-    tag_corners_world = {}
-    for row in range(12):
-        x = row * (tag_size + spacing)
-        for col in range(9):
-            y = sum(tag_size + (extra_spacing_cols.get(c, spacing) if c in extra_spacing_cols else spacing)
-                    for c in range(col))
-            P1 = np.array([x + tag_size, y, 0])  # Bottom-left
-            P2 = np.array([x + tag_size, y + tag_size, 0])  # Bottom-right
-            P3 = np.array([x, y + tag_size, 0])  # Top-right
-            P4 = np.array([x, y, 0])  # Top-left
-            tag_id = col * 12 + row
-            tag_corners_world[tag_id] = np.array([P1, P2, P3, P4])
-    return tag_corners_world
-
-def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
-    """Estimates the position and orientation of the quadrotor."""
-    # Debugging: Check structure
-    print("Data keys:", data.keys())
-    print("ID Type:", type(data['id']))
-
-    obj_points = []
-    img_points = []
-
-    if isinstance(data['id'], int): # or len(data['id']) == 0:
-        obj_points.append(tag_corners_world[data['id']])
-        img_points.append(
-                np.array([data['p1'], data['p2'], data['p3'], data['p4']]))
-    elif len(data['id']) == 0:
-        return None, None
-    else:
-        for i, tag_id in enumerate(data['id']):
-            if tag_id in tag_corners_world:
-                obj_points.append(tag_corners_world[tag_id])
-                img_points.append(
-                    np.array([data['p1'][:, i], data['p2'][:, i], data['p3'][:, i], data['p4'][:, i]]))
-
-    obj_points = np.array(obj_points, dtype=np.float32).reshape(-1, 3)
-    img_points = np.array(img_points, dtype=np.float32).reshape(-1, 2)
-    success, rvec, tvec = cv2.solvePnP(obj_points, img_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
-
-    if not success:
-        return None, None
-    
-    #Convert rotation vector to rotation matrix
-    R_cam_to_world, _ = cv2.Rodrigues(rvec)
-
-    # Apply translation vector
-    t_camera_to_robot = np.array([-0.04, 0, -0.03]).reshape(3, 1)
-    R_x = R.from_euler('x', np.pi).as_matrix()
-    R_z = R.from_euler('z', np.pi / 4).as_matrix()
-
-    # Combine rotations
-    R_cam_to_robot = R_x @ R_z
-    #R_cam_to_robot = R_z @ R_x
-
-    #Convert the camera pose to the drone pose
-    R_world_to_robot = (R_cam_to_world) @ R_cam_to_robot 
-    #R_world_to_robot =  (R_cam_to_world) @ R_cam_to_robot
-    # t_robot = R_cam_to_robot @ tvec + t_camera_to_robot
-    t_robot = (-(R_cam_to_world).T @ tvec) + t_camera_to_robot
-
-    # Convert rotation matrix to Euler Angles
-    euler_angles = R.from_matrix(R_world_to_robot).as_euler('xyz', degrees = False)
-
-    return t_robot.flatten(), euler_angles
 
 # -------------------- Process Model --------------------
 def process_model(state, u_ω, u_a, g, dt):
