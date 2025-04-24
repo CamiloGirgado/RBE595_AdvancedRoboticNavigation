@@ -1,11 +1,14 @@
 import numpy as np
 import cv2
 import scipy.io
+import os
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
-import os
-from observationModel import process_data
-from observationModel import estimate_pose
+from observationModel_1 import process_data
+from observationModel_1 import estimate_pose
+from observationModel_1 import estimated_all
+from observationModel_1 import generate_tag_corners
+from observationModel_1 import tag_corners_world
 
 R_meas = np.diag([0.1, 0.1, 0.1, 0.05, 0.05, 0.05])
 g = np.array([0, 0 -9.81]) # Gravity Vector
@@ -24,21 +27,30 @@ def process_model(state, u_ω, u_a, g, dt):
     v_dot = R_matrix @ (u_a - ba) - g  # Corrected acceleration
     state_dot = np.concatenate([p_dot, np.zeros(3), v_dot, np.zeros(6)])  # Assume biases are constant
     return state_dot
+
+def fx(self, x, dt, data):
+    xout[0] = x[6]*dt+x[0]
+    xout[1] = x[7]*dt+x[1]
+    xout[2] = x[8]*dt+x[2]
+
 def R_matrix(self, data):
     rpy = data['rpy']
 
-def G_Matrix(self, data):
+def G_Matrix(self, rpy):
     self.rpy = data['rpy']
     return np.matrix([
         [np.cos(roll), 0, -np.sin(roll)*np.cos(pitch)],
         [0, 1, np.sin(pitch)],
         [np.sin(pitch), 0, np.cos(roll)*np.cos(pitch)],
     ])
+    
 # -------------------- Measurement Model --------------------
 def measurement_model(state):
     """Maps the state to the measurement space."""
     p = state[:3]   # Position
     q = state[3:6]  # Orientation (Euler angles)
+    state[9:12] = np.array([[0.001, 0.001, 0.001]]).T
+    state[12:15] = np.array([[0.001, 0.001, 0.001]]).T
     return np.concatenate([p, q])
 
 # -------------------- Compute Angular Velocity --------------------
@@ -120,7 +132,6 @@ def plot_euler_angles(estimated_orientations, true_orientations):
 # -------------------- Main Execution --------------------
 camera_matrix = np.array([[314.1779, 0, 199.4848], [0, 314.2218, 113.7838], [0, 0, 1]], dtype=np.float32)
 dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
-tag_corners_world = generate_tag_corners()
 data_folder = "/home/camilo/dev/RBE_595_ARN/data"
 
 estimated_positions, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
