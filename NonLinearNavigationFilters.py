@@ -3,12 +3,17 @@ import cv2
 import scipy.io
 import os
 import matplotlib.pyplot as plt
+import filterpy
+import filterpy.kalman
 from scipy.spatial.transform import Rotation as R
 from observationModel_1 import process_data
 from observationModel_1 import estimate_pose
 from observationModel_1 import estimated_all
 from observationModel_1 import generate_tag_corners
 from observationModel_1 import tag_corners_world
+from filterpy.common import Q_discrete_white_noise
+from filterpy.common import Q_continuous_white_noise
+
 
 R_meas = np.diag([0.1, 0.1, 0.1, 0.05, 0.05, 0.05])
 g = np.array([0, 0 -9.81]) # Gravity Vector
@@ -28,19 +33,67 @@ def process_model(state, u_ω, u_a, g, dt):
     state_dot = np.concatenate([p_dot, np.zeros(3), v_dot, np.zeros(6)])  # Assume biases are constant
     return state_dot
 
+def P_Matrix(self):
+        P = np.array(
+        [[ 0.01248985 , 0.00179274 , 0.01191035 , 0.00812441,  0.00853663, -0.00074059],
+        [ 0.00179274 , 0.00494662 , 0.00222319 , 0.00453181, -0.00188542, -0.00014287],
+        [ 0.01191035 , 0.00222319 , 0.01989463,  0.00623472,  0.00840728, -0.00132054],
+        [ 0.00812441 , 0.00453181 , 0.00623472 , 0.00973619,  0.00250991, -0.00037419],
+        [ 0.00853663 ,-0.00188542 , 0.00840728 , 0.00250991,  0.00830289, -0.00050637],
+        [-0.00074059 ,-0.00014287 ,-0.00132054, -0.00037419, -0.00050637,  0.00012994]]
+        )
+        return P
+
 def fx(self, x, dt, data):
     xout[0] = x[6]*dt+x[0]
     xout[1] = x[7]*dt+x[1]
     xout[2] = x[8]*dt+x[2]
+    G_matrix = self.G_Matrix(x[3:6])
+    q_dot = np.linalg.inv(G_matrix) @ U_w
+    xout[3:6] = q_dot.squeeze()
+    Rq_matrix = self.Rq_matrix(data)
+    xout[6:9] = (Rq_matrix @ U_a + g).squeeze()
+    # Define the covariance matrices for gyroscope and accelerometer bias noise
+    sigma_bg_x = 0.2
+    sigma_bg_y = 0.2
+    sigma_bg_z = 5.5
+    sigma_ba_x = 0.2
+    sigma_ba_y = 0.2
+    sigma_ba_z = 5.5
+    Qg = np.diag([sigma_bg_x**2, sigma_bg_y**2, sigma_bg_z**2])  # Gyroscope bias noise covariance
+    Qa = np.diag([sigma_ba_x**2, sigma_ba_y**2, sigma_ba_z**2])  # Accelerometer bias noise covariance
+    # Generate noise for gyroscope and accelerometer biases
+    Nbg = np.random.multivariate_normal(mean=np.zeros(3), cov=Qg)
+    Nba = np.random.multivariate_normal(mean=np.zeros(3), cov=Qa)
+    xout[9:12] = x[9:12] + Nbg
+    xout[12:15] = x[12:15] + Nba
+    xout[9:12] = Nbg
+    xout[12:15] = Nba
+    return xout
 
-def R_matrix(self, data):
+def Rq_matrix(self, data):
     rpy = data['rpy']
+    rotation_x = R.from_euler('x', rpy[0], degrees=False).as_matrix()
+    rotation_y = R.from_euler('y', rpy[1], degrees=False).as_matrix()
+    rotation_z = R.from_euler('z', rpy[2], degrees=False).as_matrix()
+    self.R = rotation_y @ rotation_x @ rotation_z
+    check = R.from_matrix(self.R).as_euler('xyz', degrees=False)
+        
+    return self.R
+
+def hx(self, x):
+    hx=self.H @ x
+    return hx.T
 
 def G_Matrix(self, rpy):
     self.rpy = data['rpy']
+    roll = rpy[0]
+    pitch = rpy[1]
+    yaw = rpy[2]
+
     return np.matrix([
-        [np.cos(roll), 0, -np.sin(roll)*np.cos(pitch)],
-        [0, 1, np.sin(pitch)],
+        [np.cos(pitch), 0, -np.sin(roll)*np.cos(pitch)],
+        [0, 1, np.sin(roll)],
         [np.sin(pitch), 0, np.cos(roll)*np.cos(pitch)],
     ])
     
@@ -72,6 +125,14 @@ def compute_linear_acceleration(positions, dt):
     return acceleration
 
 # -------------------- EKF Prediction and Update --------------------
+
+def ekf_init():
+    state = np.zeros(15)  # Initial state vector
+    P = np.eye(15) * 0.1  # Initial covariance matrix
+    particles = np.random.multivariate_normal(state, P, size=100)  # Initialize particles
+    weights = np.ones(particles.shape[0]) / particles.shape[0]  # Initialize weights
+    return state, P, particles, weights
+
 def ekf_predict(state, P, u_ω, u_a, g, dt):
     F = np.eye(15)
     F[0:3, 6:9] = np.eye(3) * dt
@@ -138,8 +199,8 @@ estimated_positions, true_positions, true_orientations = process_data(data_folde
 
 for t in range(len(estimated_positions)):
     dt = 0.01  # Assuming a fixed timestep or based on actual timestamps
-    u_ω = compute_angular_velocity(estimated_all, dt)[t]
-    u_a = compute_linear_acceleration(estimated_positions, dt)[t]
+    u_ω = np.array([data['omg']]).T
+    u_a = np.array([data['acc']]).T
 
     state_pred, P_pred = ekf_predict(state, P, u_ω, u_a, g, dt)
     state, P = ekf_update(state_pred, P_pred, estimated_positions[t], R_meas)
