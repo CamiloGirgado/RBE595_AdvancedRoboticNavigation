@@ -8,6 +8,10 @@ from haversine import haversine, Unit
 # Load Dataset
 data = pd.read_csv("victoria_park.csv", index_col=0)
 
+# Convert index to timedelta and resample to 1-second intervals
+data.index = pd.to_timedelta(data.index, unit='s')
+data = data.resample('1s').mean()
+
 # Convert GPS coordinates to Cartesian frame
 def latlon_to_xy(lat, lon, ref_lat, ref_lon):
     return haversine((lat, lon), (ref_lat, ref_lon), unit=Unit.METERS)
