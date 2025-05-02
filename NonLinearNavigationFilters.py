@@ -13,11 +13,19 @@ from observationModel_1 import generate_tag_corners
 from observationModel_1 import tag_corners_world
 from filterpy.common import Q_discrete_white_noise
 from filterpy.common import Q_continuous_white_noise
-
+from filterpy.kalman import MerweScaledSigmaPoints
 
 R_meas = np.diag([0.1, 0.1, 0.1, 0.05, 0.05, 0.05])
 g = np.array([0, 0 -9.81]) # Gravity Vector
 Q = np.diag([0.01 * 9 + [0.001] * 6])
+points = MerweScaledSigmaPoints(n=15, alpha=.1, beta=2., kappa=0)
+H = np.array([[1, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ])
 
 # -------------------- Process Model --------------------
 def process_model(state, u_ω, u_a, g, dt):
@@ -45,30 +53,34 @@ def P_Matrix(self):
         return P
 
 def fx(self, x, dt, data):
-    xout[0] = x[6]*dt+x[0]
-    xout[1] = x[7]*dt+x[1]
-    xout[2] = x[8]*dt+x[2]
+    xout[0] = x[6]*dt + x[0]
+    xout[1] = x[7]*dt + x[1]
+    xout[2] = x[8]*dt + x[2]
     G_matrix = self.G_Matrix(x[3:6])
+    U_w = (np.array([data['omg']]) - x[9:12]).T
     q_dot = np.linalg.inv(G_matrix) @ U_w
     xout[3:6] = q_dot.squeeze()
     Rq_matrix = self.Rq_matrix(data)
+    U_a = (np.array([data['acc']]) - x[12:15]).T
     xout[6:9] = (Rq_matrix @ U_a + g).squeeze()
+
     # Define the covariance matrices for gyroscope and accelerometer bias noise
-    sigma_bg_x = 0.2
-    sigma_bg_y = 0.2
-    sigma_bg_z = 5.5
-    sigma_ba_x = 0.2
-    sigma_ba_y = 0.2
-    sigma_ba_z = 5.5
-    Qg = np.diag([sigma_bg_x**2, sigma_bg_y**2, sigma_bg_z**2])  # Gyroscope bias noise covariance
-    Qa = np.diag([sigma_ba_x**2, sigma_ba_y**2, sigma_ba_z**2])  # Accelerometer bias noise covariance
+    #sigma_bg_x = 0.2
+    #sigma_bg_y = 0.2
+    #sigma_bg_z = 5.5
+    #sigma_ba_x = 0.2
+    #sigma_ba_y = 0.2
+    #sigma_ba_z = 5.5
+
+    # Qg = np.diag([sigma_bg_x**2, sigma_bg_y**2, sigma_bg_z**2])  # Gyroscope bias noise covariance
+    # Qa = np.diag([sigma_ba_x**2, sigma_ba_y**2, sigma_ba_z**2])  # Accelerometer bias noise covariance
+    
     # Generate noise for gyroscope and accelerometer biases
     Nbg = np.random.multivariate_normal(mean=np.zeros(3), cov=Qg)
     Nba = np.random.multivariate_normal(mean=np.zeros(3), cov=Qa)
     xout[9:12] = x[9:12] + Nbg
     xout[12:15] = x[12:15] + Nba
-    xout[9:12] = Nbg
-    xout[12:15] = Nba
+
     return xout
 
 def Rq_matrix(self, data):
