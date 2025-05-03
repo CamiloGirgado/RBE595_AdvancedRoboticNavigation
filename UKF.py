@@ -17,7 +17,9 @@ from filterpy.kalman import MerweScaledSigmaPoints
 
 R_meas = np.diag([0.1, 0.1, 0.1, 0.05, 0.05, 0.05])
 g = np.array([0, 0 -9.81]) # Gravity Vector
-Q = np.diag([0.01 * 9 + [0.001] * 6])
+Q = np.eye(15)*0.0015
+Q[np.arange(6), np.arange(6)] = [0.015, 0.015, 0.015, 0.001, 0.001, 0.001]
+
 points = MerweScaledSigmaPoints(n=15, alpha=.1, beta=2., kappa=0)
 H = np.array([[1, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -50,18 +52,31 @@ def P_Matrix(self):
         [ 0.00853663 ,-0.00188542 , 0.00840728 , 0.00250991,  0.00830289, -0.00050637],
         [-0.00074059 ,-0.00014287 ,-0.00132054, -0.00037419, -0.00050637,  0.00012994]]
         )
-        return P
+        P2 = np.diag([0.008]*6)
+        return P2
+
+def G_Matrix(self, rpy):
+    self.rpy = data['rpy']
+    roll = rpy[0]
+    pitch = rpy[1]
+    yaw = rpy[2]
+
+    return np.matrix([
+        [np.cos(pitch), 0, -np.sin(roll)*np.cos(pitch)],
+        [0, 1, np.sin(roll)],
+        [np.sin(pitch), 0, np.cos(roll)*np.cos(pitch)],
+    ])
 
 def fx(self, x, dt, data):
     xout[0] = x[6]*dt + x[0]
     xout[1] = x[7]*dt + x[1]
     xout[2] = x[8]*dt + x[2]
     G_matrix = self.G_Matrix(x[3:6])
-    U_w = (np.array([data['omg']]) - x[9:12]).T
+    U_w = (np.array([data['omg']])).T
     q_dot = np.linalg.inv(G_matrix) @ U_w
     xout[3:6] = q_dot.squeeze()
-    Rq_matrix = self.Rq_matrix(data)
-    U_a = (np.array([data['acc']]) - x[12:15]).T
+    Rq_matrix = self.Rq_matrix(data[['rpy']])
+    U_a = (np.array([data['acc']])).T
     xout[6:9] = (Rq_matrix @ U_a + g).squeeze()
 
     # Define the covariance matrices for gyroscope and accelerometer bias noise
@@ -88,77 +103,24 @@ def Rq_matrix(self, data):
     rotation_x = R.from_euler('x', rpy[0], degrees=False).as_matrix()
     rotation_y = R.from_euler('y', rpy[1], degrees=False).as_matrix()
     rotation_z = R.from_euler('z', rpy[2], degrees=False).as_matrix()
-    self.R = rotation_y @ rotation_x @ rotation_z
+    R = rotation_z @ rotation_y @ rotation_x
     check = R.from_matrix(self.R).as_euler('xyz', degrees=False)
         
-    return self.R
+    return R
 
 def hx(self, x):
     hx=self.H @ x
     return hx.T
 
-def G_Matrix(self, rpy):
-    self.rpy = data['rpy']
-    roll = rpy[0]
-    pitch = rpy[1]
-    yaw = rpy[2]
-
-    return np.matrix([
-        [np.cos(pitch), 0, -np.sin(roll)*np.cos(pitch)],
-        [0, 1, np.sin(roll)],
-        [np.sin(pitch), 0, np.cos(roll)*np.cos(pitch)],
-    ])
-    
-# -------------------- Measurement Model --------------------
-def measurement_model(state):
-    """Maps the state to the measurement space."""
-    p = state[:3]   # Position
-    q = state[3:6]  # Orientation (Euler angles)
-    state[9:12] = np.array([[0.001, 0.001, 0.001]]).T
-    state[12:15] = np.array([[0.001, 0.001, 0.001]]).T
-    return np.concatenate([p, q])
-
-# -------------------- Compute Angular Velocity --------------------
-def compute_angular_velocity(orientations, dt):
-    """Computes angular velocity from Euler angles using finite differences."""
-    omega = np.zeros_like(orientations)
-    omega[1:] = (orientations[1:] - orientations[:-1]) / dt
-    return omega
-
-# -------------------- Compute Linear Acceleration --------------------
-def compute_linear_acceleration(positions, dt):
-    """Computes linear acceleration from position using finite differences."""
-    velocity = np.zeros_like(positions)
-    acceleration = np.zeros_like(positions)
-    
-    velocity[1:] = (positions[1:] - positions[:-1]) / dt  # First derivative
-    acceleration[1:] = (velocity[1:] - velocity[:-1]) / dt  # Second derivative
-    
-    return acceleration
-
 # -------------------- UKF Prediction and Update --------------------
 
-def ukf_init():
-    state = np.zeros(15)  # Initial state vector
-    P = np.eye(15) * 0.1  # Initial covariance matrix
-    particles = np.random.multivariate_normal(state, P, size=100)  # Initialize particles
-    weights = np.ones(particles.shape[0]) / particles.shape[0]  # Initialize weights
-    return state, P, particles, weights
+def predict(self, dt, data):
+    self.ukf.predict(dt,fx=self.fx,data=data)
+    return self.ukf.x
 
-def ukf_predict(state, P, u_ω, u_a, g, dt):
-    F = np.eye(15)
-    F[0:3, 6:9] = np.eye(3) * dt
-    P_pred = F @ P @ F.T + Q
-    return state + process_model(state, u_ω, u_a, g, dt) * dt, P_pred
-
-def ukf_update(state_pred, P_pred, z, R_meas):
-    H = np.eye(6, 15)
-    z_pred = measurement_model(state_pred)
-    S = H @ P_pred @ H.T + R_meas
-    K = P_pred @ H.T @ np.linalg.inv(S)
-    state_updated = state_pred + K @ (z - z_pred)
-    P_updated = (np.eye(15) - K @ H) @ P_pred
-    return state_updated, P_updated
+def update(self, z):
+    self.ukf.update(z.squeeze()) 
+    return self.ukf.x
 
 # -------------------- Particle Filter --------------------
 
