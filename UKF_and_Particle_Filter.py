@@ -136,22 +136,22 @@ def compute_linear_acceleration(positions, dt):
     
     return acceleration
 
-# -------------------- EKF Prediction and Update --------------------
+# -------------------- UKF Prediction and Update --------------------
 
-def ekf_init():
+def ukf_init():
     state = np.zeros(15)  # Initial state vector
     P = np.eye(15) * 0.1  # Initial covariance matrix
     particles = np.random.multivariate_normal(state, P, size=100)  # Initialize particles
     weights = np.ones(particles.shape[0]) / particles.shape[0]  # Initialize weights
     return state, P, particles, weights
 
-def ekf_predict(state, P, u_ω, u_a, g, dt):
+def ukf_predict(state, P, u_ω, u_a, g, dt):
     F = np.eye(15)
     F[0:3, 6:9] = np.eye(3) * dt
     P_pred = F @ P @ F.T + Q
     return state + process_model(state, u_ω, u_a, g, dt) * dt, P_pred
 
-def ekf_update(state_pred, P_pred, z, R_meas):
+def ukf_update(state_pred, P_pred, z, R_meas):
     H = np.eye(6, 15)
     z_pred = measurement_model(state_pred)
     S = H @ P_pred @ H.T + R_meas
@@ -214,8 +214,8 @@ for t in range(len(estimated_positions)):
     u_ω = np.array([data['omg']]).T
     u_a = np.array([data['acc']]).T
 
-    state_pred, P_pred = ekf_predict(state, P, u_ω, u_a, g, dt)
-    state, P = ekf_update(state_pred, P_pred, estimated_positions[t], R_meas)
+    state_pred, P_pred = ukf_predict(state, P, u_ω, u_a, g, dt)
+    state, P = ukf_update(state_pred, P_pred, estimated_positions[t], R_meas)
     particles = particle_filter_predict(particles, u_ω, u_a, g, dt, Q)
     weights = particle_filter_update(particles, estimated_positions[t], R_meas, weights)
     particles = low_variance_resampling(particles, weights)
