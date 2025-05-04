@@ -179,18 +179,10 @@ class observationModel_1:
         plt.show()
 
     def interpolate(time_target,t1, t2,y1, y2):
-            """
-            Interpolate the data to match the target time.
-            :param x_target: Target time values.
-            :param y_target: Target data values.
-            :param x_source: Source time values.
-            :param y_source: Source data values.
-            :return: Interpolated data.
-            """
             interpolated_data = y1 + ((time_target - t1) * (y2 - y1) / (t2 - t1))
             return interpolated_data
+    
     def interpolate_data(estimated_all, true_positions):
-        """Interpolate estimated data to align with true positions."""
         if estimated_all is None or len(estimated_all) == 0:
             return None
 
