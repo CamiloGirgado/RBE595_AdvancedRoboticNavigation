@@ -37,7 +37,7 @@ class ParticleFilter:
             particles[i] += process_model(particles[i], u_ω, u_a, g, dt) * dt + noise[i]
         return particles
 
-    def particle_filter_update(self, measurement)
+    def particle_filter_update(self, measurement):
         measured_position = measurement[0:3]
         measured_orientation = measurement[3:6]
         position_difference = measured_position - self.particles[:, 0:3]
@@ -109,7 +109,7 @@ class ParticleFilter:
 
 
     def low_variance_resampling(self):
-        indices = np.searchsorted(self.num_particles, size = self.num_particles p =np.cumsum(self.weights))
+        indices = np.searchsorted(self.num_particles, size = self.num_particles, p = np.cumsum(self.weights))
         self.particles = self.particles[indices]
         self.weights = np.ones(self.num_particles) / self.num_particles
         

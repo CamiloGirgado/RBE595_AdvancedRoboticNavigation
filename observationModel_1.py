@@ -53,7 +53,6 @@ class observationModel_1:
         return tag_corners_world
 
     def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
-        """Estimates the position and orientation of the quadrotor."""
         # Debugging: Check structure
         print("Data keys:", data.keys())
         print("ID Type:", type(data['id']))
@@ -105,7 +104,7 @@ class observationModel_1:
         return t_robot.flatten(), euler_angles
 
     def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
-        """Processes all .mat files in the given directory and estimates pose."""
+        #Processes all .mat files in the given directory and estimates pose.
         estimated_positions = []
         estimated_orientations = []
         true_positions = []
@@ -202,7 +201,6 @@ class observationModel_1:
             interpolated_data.append(np.array([interpolated_x, interpolated_y, interpolated_z, interpolated_roll, interpolated_pitch, interpolated_yaw, estimated_time]))
 
         return np.array(interpolated_data) if interpolated_data else None
-
 
     def compute_covariance(estimated_all, true_positions, true_orientations):
         """Computes the covariance matrix of the observation noise."""
