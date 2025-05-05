@@ -23,71 +23,6 @@ class VisualLocalization:
             measurement_model=self.measurement_model,
             init_state_sampler=self.init_sampler
         )
-    def process_model(self,x, u):
-        # simple linear motion with noise
-        return x + 1.0 + np.random.normal(0, 1)
-
-    def measurement_model(self,x, z):
-        # Gaussian likelihood
-        return np.exp(-0.5 * ((z - x) ** 2) / 2.0)
-
-    def init_sampler(self,N, dim):
-        return np.random.uniform(-10, 10, size=(N, dim))
-
-    def process_particle_filter(self):
-
-        for t in range(50):
-            self.pf.predict()
-            z = 5.0 + np.random.normal(0, 1)  # fake measurement
-            self.pf.update(z)
-            self.pf.resample()
-            est = self.pf.estimate()
-            print(f"Time {t}: Estimate = {est}")
-
-    def process_data(self):
-        """
-        Process the measurement data to extract relevant information.
-        :return: Processed data.
-        """
-        measurement_data = MeasurementData()
-        position = None
-        ekfFilter = UkfFilter(self.mat_contents)
-        self.time = []
-        self.results_np = None
-        self.results_filtered_np = None
-        self.x = np.zeros((15,1))
-        is_initialized = False
-        dt = 0.
-        time_last = 0.
-        for data in self.mat_contents['data']:
-            if isinstance(data['id'],np.ndarray):
-                # This has no April tags found in the image
-                if len(data['id']) == 0:
-                    continue
-            # Estimate the pose for each item in the data
-            position,orientation = measurement_data.estimate_pose(data)  # Estimate the pose for each item in the data   
-            # if not is_initialized:
-            #     self.x[0:3] = position
-            #     self.x[3:6] = orientation.T
-            #     self.x[9:12] = np.array([[0.01,0.01,0.01]]).T
-            #     self.x[12:15] = np.array([[0.01,0.01,0.01]]).T
-            #     is_initialized = True
-            if position is None or orientation is None:
-                print("Warning: Pose estimation failed for the current data item. Skipping this item.")
-                continue  # Skip this item if pose estimation failed
-            dt = data['t'] - time_last
-            time_last = data['t']
-            filtered_state_x = ekfFilter.predict(dt,data)
-
-            z = np.hstack((np.array(position).T,orientation))
-            filtered_state_x = ekfFilter.update(z.T)
-            result = np.hstack((np.array(position).T,orientation))
-            result = np.hstack((result, np.array([[data['t']]])))
-            filtered_state_x = np.hstack((filtered_state_x, np.array([data['t']])))
-            # result= np.hstack((np.array(position).squeeze(),orientation,data['t']))
-            self.results_np = result if self.results_np is None else np.vstack((self.results_np, result))
-            self.results_filtered_np= filtered_state_x if self.results_filtered_np is None else np.vstack((self.results_filtered_np, filtered_state_x))
-        return self.results_np
 
     def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
         """Processes all .mat files in the given directory and estimates pose."""
@@ -136,7 +71,6 @@ class VisualLocalization:
         return estimated_all, np.array(true_positions), np.array(true_orientations)
 
     def plot_trajectory(estimated_positions, true_positions):
-        """Plots the estimated trajectory against the ground truth."""
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
@@ -149,53 +83,32 @@ class VisualLocalization:
         plt.show()
     
     def __plot_trajectory_estimated__(self):
-        # data = self.position_data
-        # self.measurement_position_data_np = np.array(data).squeeze().T
 
-        # Define the trajectory data (example)
-        # self.results_np.T.squeeze()[6,:]
         x = self.results_np.T.squeeze()[0,:]
         y = self.results_np.T.squeeze()[1,:]
         z = self.results_np.T.squeeze()[2,:]
         
         # Plot the trajectory
-        self.ax.plot(x, y, z, label='Estimated', color='r', linewidth=1, linestyle='-' )  # Set color and linewidth for better visibility
-
-        # Set labels and title
+        self.ax.plot(x, y, z, label='Estimated', color='r', linewidth=1, linestyle='-' ) 
         self.ax.set_xlabel('X-axis')
         self.ax.set_ylabel('Y-axis')
         self.ax.set_zlabel('Z-axis')
         self.ax.set_title('3D Trajectory Plot')
-
-        # Add a legend
         self.ax.legend()
 
-        # Show the plot
-        # plt.show()
-    
     def __plot_trajectory_estimated_filtered__(self):
-        # data = self.position_data
-        # self.measurement_position_data_np = np.array(data).squeeze().T
 
-        # Define the trajectory data (example)
-        # self.results_np.T.squeeze()[6,:]
         x = self.results_filtered_np.T.squeeze()[0,:]
         y = self.results_filtered_np.T.squeeze()[1,:]
         z = self.results_filtered_np.T.squeeze()[2,:]
         
         # Plot the trajectory
-        self.ax.plot(x, y, z, label='Filtered Estimate', color='green', linewidth=1, linestyle='-' )  # Set color and linewidth for better visibility
-
-        # Set labels and title
+        self.ax.plot(x, y, z, label='Filtered Estimate', color='green', linewidth=1, linestyle='-' )
         self.ax.set_xlabel('X-axis')
         self.ax.set_ylabel('Y-axis')
         self.ax.set_zlabel('Z-axis')
         self.ax.set_title('3D Trajectory Plot')
-
-        # Add a legend
         self.ax.legend()
-
-        # Show the plot
         plt.show()
 
     def plot_euler_angles(estimated_orientations, true_orientations):

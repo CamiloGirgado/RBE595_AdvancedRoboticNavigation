@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.stats import multivariate_normal
+from scipy.spatial.transform import Rotation as R
 
 # -------------------- Particle Filter --------------------
 class ParticleFilter:
@@ -10,6 +11,8 @@ class ParticleFilter:
         self.weights = np.ones(num_particles) / num_particles
         self.process_model = self.fx
         self.measurement_model = self.measurement_model
+        self.Nbg = np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qg)
+        self.Nba = np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qa)
         sigma_bg_x = 0.2
         sigma_bg_y = 0.2
         sigma_bg_z = 5.5
@@ -24,22 +27,19 @@ class ParticleFilter:
             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             ])
-
     
     def measurement_model(self, x, measurement):
         mm = x[0:6]
         prob = multivariate_normal.pdf(measurement, mean=mm, cov=self.R_meas)
         return prob
     
-    def particle_filter_predict(particles, u_ω, u_a, g, dt, Q):
-        noise = np.random.multivariate_normal(np.zeros(15), Q, size=particles.shape[0])
-        for i in range(particles.shape[0]):
-            particles[i] += process_model(particles[i], u_ω, u_a, g, dt) * dt + noise[i]
-        return particles
+    def particle_filter_predict(self, dt=1, control_input=None):
+        for i in range(self.num_particles):
+            self.particles[i] = self.process_model(self.particles[i], dt, control_input)
 
     def particle_filter_update(self, measurement):
-        measured_position = measurement[0:3]
-        measured_orientation = measurement[3:6]
+        measured_position = measurement[0:3].T
+        measured_orientation = measurement[3:6].T 
         position_difference = measured_position - self.particles[:, 0:3]
         orientation_difference = measured_orientation - self.particles[:, 3:6]
 
@@ -54,13 +54,25 @@ class ParticleFilter:
         # Total Error
         total_error = position_error + orientation_error
 
-    
     def sampling(self):
-        self.particles = np.random.multivariate_normal(self.particles, self.Q, size=self.num_particles)
-        return self.particles
+        indices = np.random.choice(self.num_particles, size=self.num_particles, p=self.weights)
+        self.particles = self.particles[indices]
+        self.weights = np.ones(self.num_particles) / self.num_particles
     
     def estimate(self):
-        return np.average(self.particles, weights=self.weights, axis=0)
+        all = np.average(self.particles, weights=self.weights, axis=0)
+        sin_roll  = np.average(np.sin(self.particles[:, 3]), weights=self.weights)
+        cos_roll  = np.average(np.cos(self.particles[:, 3]), weights=self.weights)
+        sin_pitch = np.average(np.sin(self.particles[:, 4]), weights=self.weights)
+        cos_pitch = np.average(np.cos(self.particles[:, 4]), weights=self.weights)
+        sin_yaw   = np.average(np.sin(self.particles[:, 5]), weights=self.weights)
+        cos_yaw   = np.average(np.cos(self.particles[:, 5]), weights=self.weights)
+        avg_roll  = np.arctan2(sin_roll, cos_roll)
+        avg_pitch = np.arctan2(sin_pitch, cos_pitch)
+        avg_yaw   = np.arctan2(sin_yaw, cos_yaw)
+        all[3:6] = np.array([avg_roll, avg_pitch, avg_yaw])
+
+        return all
 
     def fx(self, x, dt, data):
         xout = x.copy()
@@ -78,8 +90,8 @@ class ParticleFilter:
         
         omg_bias = x[9:12]
         acc_bias = x[12:15]
-        velocity = x[6:9]
-        angular_velocity = x[3:6]
+        updated_omg_bias = omg_bias + self.Nbg*dt
+        updated_acc_bias = acc_bias + self.Nba*dt
 
         # Orientation Update
         updated_angular_velocity = U_w + omg_bias
@@ -105,12 +117,3 @@ class ParticleFilter:
         xout[12:15] = updated_acc_bias
 
         return xout
-    
-
-
-    def low_variance_resampling(self):
-        indices = np.searchsorted(self.num_particles, size = self.num_particles, p = np.cumsum(self.weights))
-        self.particles = self.particles[indices]
-        self.weights = np.ones(self.num_particles) / self.num_particles
-        
-        return particles[indices]
