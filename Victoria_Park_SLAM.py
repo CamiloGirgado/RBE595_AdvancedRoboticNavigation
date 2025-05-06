@@ -1,71 +1,72 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from filterpy.kalman import ExtendedKalmanFilter
-from filterpy.common import Q_discrete_white_noise
-from haversine import haversine, Unit 
+from math import sin, cos, tan, atan2
 
-# Load Dataset
-data = pd.read_csv("victoria_park.csv", index_col=0)
+# Vehicle geometry
+L = 2.83  # wheelbase in meters
 
-# Convert index to timedelta and resample to 1-second intervals
-data.index = pd.to_timedelta(data.index, unit='s')
-data = data.resample('1s').mean()
+# Load and resample data
+file_path = r"C:\Users\camil\Documents\WPI\RBE595-ARN\Assignment 4\victoria_park.csv"
+data_in = pd.read_csv(file_path, index_col=0)
+data_in.index = pd.to_timedelta(data_in.index, unit='s')
+data_in = data_in.resample('1s').mean()
 
-# Convert GPS coordinates to Cartesian frame
-def latlon_to_xy(lat, lon, ref_lat, ref_lon):
-    return haversine((lat, lon), (ref_lat, ref_lon), unit=Unit.METERS)
+# Extract input measurements
+steering = np.deg2rad(data_in['steering'].values)  # convert degrees to radians
+speed = data_in['speed'].values
+laser_scans = data_in.filter(like='laser').values
 
-ref_lat, ref_lon = data.iloc[0]['latitude'], data.iloc[0]['longitude']
-data['x'] = data.apply(lambda row: latlon_to_xy(row['latitude'], ref_lon, ref_lat, ref_lon), axis=1)
-data['y'] = data.apply(lambda row: latlon_to_xy(ref_lat, row['longitude'], ref_lat, ref_lon), axis=1)
+# Initial state
+x = np.array([0.0, 0.0, 0.0])  # [x, y, yaw]
+trajectory = [x.copy()]
 
-# Define Motion Model (Ackermann Steering)
-def motion_model(state, control, dt):
-    x, y, psi = state
-    v, delta = control
-    L = 2.83  # Vehicle wheelbase
-    
-    x_next = x + v * np.cos(psi) * dt
-    y_next = y + v * np.sin(psi) * dt
-    psi_next = psi + (v / L) * np.tan(delta) * dt
-    return np.array([x_next, y_next, psi_next])
+# Motion model
 
-# EKF SLAM Setup
-class EKF_SLAM:
-    def __init__(self, num_landmarks):
-        self.num_landmarks = num_landmarks
-        self.dim_x = 3 + 2 * num_landmarks
-        self.dim_z = 2 * num_landmarks
-        self.filter = ExtendedKalmanFilter(dim_x=self.dim_x, dim_z=self.dim_z)
-        self.filter.Q = Q_discrete_white_noise(dim=self.dim_x, dt=0.1, var=0.1)
-        self.filter.P *= 10  # Initial uncertainty
+def motion_model(x, v, delta, dt):
+    x_pos, y_pos, yaw = x
+    dx = v * cos(yaw) * dt
+    dy = v * sin(yaw) * dt
+    dtheta = (v / L) * tan(delta) * dt
+    return np.array([x_pos + dx, y_pos + dy, yaw + dtheta])
 
-    def predict(self, control, dt):
-        self.filter.x[:3] = motion_model(self.filter.x[:3], control, dt)
-        self.filter.predict()
-    
-    def update(self, measurements):
-        self.filter.update(measurements)
+# Process all data
+dt = 1.0  # 1Hz after resampling
+for i in range(len(speed)):
+    v = speed[i]
+    delta = steering[i]
+    x = motion_model(x, v, delta, dt)
+    trajectory.append(x.copy())
 
-# Initialize SLAM
-slam = EKF_SLAM(num_landmarks=20)
-vehicle_positions = []
+trajectory = np.array(trajectory)
 
-# Run SLAM
-for i in range(len(data)):
-    control = [data.iloc[i]['speed'], data.iloc[i]['steering']]
-    slam.predict(control, dt=0.1)
-    measurements = data.iloc[i][['laser_x', 'laser_y']].values
-    slam.update(measurements)
-    vehicle_positions.append(slam.filter.x[:3])
+# Simple landmark extraction from laser scans (peaks within range)
+def extract_landmarks(scan_row):
+    angles = np.linspace(-np.pi/2, np.pi/2, len(scan_row))
+    landmarks = []
+    for r, theta in zip(scan_row, angles):
+        if 0.5 < r < 80.0:
+            lx = r * np.cos(theta)
+            ly = r * np.sin(theta)
+            landmarks.append([lx, ly])
+    return np.array(landmarks)
 
-# Plot Results
-vehicle_positions = np.array(vehicle_positions)
-plt.plot(vehicle_positions[:, 0], vehicle_positions[:, 1], label="Estimated Path")
-plt.scatter(data['x'], data['y'], color='red', label="GPS Path")
+# Example: Extract landmarks from one scan
+sample_landmarks = extract_landmarks(laser_scans[100])
+
+# Transform sample landmarks to world frame
+x_pos, y_pos, yaw = trajectory[100]
+R = np.array([[cos(yaw), -sin(yaw)], [sin(yaw), cos(yaw)]])
+transformed_landmarks = (R @ sample_landmarks.T).T + np.array([x_pos, y_pos])
+
+# Plot
+plt.figure(figsize=(10, 10))
+plt.plot(trajectory[:, 0], trajectory[:, 1], label='Vehicle Path')
+plt.scatter(transformed_landmarks[:, 0], transformed_landmarks[:, 1], c='red', s=10, label='Landmarks')
+plt.axis('equal')
+plt.xlabel('X [m]')
+plt.ylabel('Y [m]')
+plt.title('Victoria Park SLAM (Odometry + Landmark Extraction)')
 plt.legend()
-plt.xlabel("X Position (meters)")
-plt.ylabel("Y Position (meters)")
-plt.title("SLAM Vehicle Path Estimation")
+plt.grid()
 plt.show()
