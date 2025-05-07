@@ -6,21 +6,23 @@ import matplotlib.pyplot as plt
 import filterpy
 import filterpy.kalman
 from scipy.spatial.transform import Rotation as R
-from observationModel_1 import observationModel_1
-from filterpy.kalman import MerweScaledSigmaPoints
+from observationModel_1 import observationModel
+from filterpy.kalman import UnscentedKalmanFilter
+from filterpy.common import Q_discrete_white_noise
+from filterpy.common import Q_continuous_white_noise
 from filterpy.kalman import JulierSigmaPoints
+from filterpy.kalman import MerweScaledSigmaPoints
 
 
-class UnscentedKalmanFilter:
-    def __init__(self, observationmodel_1):
-        self.observationModel_1 = observationModel_1
+class UKF:
+    def __init__(self, model):
+        self.observationModel_1 = model
         points = JulierSigmaPoints(n=15, kappa=0.1)
         self.Q = np.eye(15)*0.0015
         self.Q[np.arange(6), np.arange(6)] = [0.015, 0.015, 0.015, 0.001, 0.001, 0.001]
         self.ukf = UnscentedKalmanFilter(dim_x=15, dim_z=6, dt=0.001, hx=self.hx, fx=self.fx, points=points)
         self.R = self.P_Matrix()
         self.ukf.R = self.R
-        self.check_covariance_matrix(self.R)
         self.ukf.Q = self.Q
         points = MerweScaledSigmaPoints(n=15, alpha=.1, beta=2., kappa=0)
         self.H = np.array([[1, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -54,12 +56,6 @@ class UnscentedKalmanFilter:
             [np.sin(pitch), 0, np.cos(roll)*np.cos(pitch)],
             ])
     
-    def check_covariance_matrix(self, matrix):
-        if np.allclose(matrix, matrix.T):
-            if self.debug:
-                print("Covariance matrix is symmetric.")
-        else:
-            print("Covariance matrix is not symmetric.")
     
     def hx(self, x):
         hx = self.H @ x
@@ -67,29 +63,31 @@ class UnscentedKalmanFilter:
 
     def fx(self, x, dt, data):
         xout = x.copy()
+        if data.get('omg') is None or data.get('acc') is None:
+            return xout
         xout[0] = x[6]*dt + x[0]
         xout[1] = x[7]*dt + x[1]
         xout[2] = x[8]*dt + x[2]
-        g = np.array([0, 0 -9.81]) # Gravity Vector
+        g = np.array([[0, 0, -9.81]]).T # Gravity Vector
         G_matrix = self.G_Matrix(x[3:6])
         U_w = (np.array([data['omg']])).T
         q_dot = np.linalg.inv(G_matrix) @ U_w
         xout[3:6] = q_dot.squeeze()
-        Rq_matrix = self.Rq_matrix(data[['rpy']])
+        Rq_matrix = self.Rq_matrix(data['rpy'])
         U_a = (np.array([data['acc']])).T
-        xout[6:9] = (Rq_matrix @ U_a + g).squeeze()
+        xout[6:9] = ((Rq_matrix @ U_a) + g).squeeze()
 
         return xout
 
     def Rq_matrix(self, data):
-        rpy = data['rpy']
+        rpy = data
         rotation_x = R.from_euler('x', rpy[0], degrees=False).as_matrix()
         rotation_y = R.from_euler('y', rpy[1], degrees=False).as_matrix()
         rotation_z = R.from_euler('z', rpy[2], degrees=False).as_matrix()
-        R = rotation_z @ rotation_y @ rotation_x
-        check = R.from_matrix(self.R).as_euler('xyz', degrees=False)
+        r = rotation_z @ rotation_y @ rotation_x
         
-        return R
+        
+        return r
 
     def hx(self, x):
         hx=self.H @ x
