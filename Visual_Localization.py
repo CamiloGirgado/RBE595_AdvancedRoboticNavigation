@@ -98,20 +98,20 @@ class VisualLocalization:
             dt = data['t'] - time_last
             if time_last == 0. and not is_initialized:
                 dt = 0.001
-                self.pf.particles[:,0:3] = np.tile(position, self.pf.num_particles).T
-                self.pf.particles[:,3:6] = np.tile(orientation.T, self.pf.num_particles).T
+                self.pf.particles[:,0:3] = np.tile(position.reshape(3,1), self.pf.num_particles).T
+                self.pf.particles[:,3:6] = np.tile(orientation.reshape(3,1), self.pf.num_particles).T
                 is_initialized = True
                 # self.pf.particles[:,9:12] = np.array([[0.0001,0.0001,0.0001]]).T
                 # self.pf.particles[:,12:15] = np.array([[0.0001,0.0001,0.0001]]).T    
             time_last = data['t']
 
-            self.pf.predict(dt,data)
+            self.pf.particle_filter_predict(dt,data)
             z = np.hstack((np.array(position).T,orientation))
-            self.pf.update(z.T)
-            self.pf.resample()
+            self.pf.particle_filter_update(z.T)
+            self.pf.sampling()
             filtered_state_x = self.pf.estimate()
             result = np.hstack((np.array(position).T,orientation))
-            result = np.hstack((result, np.array([[data['t']]])))
+            result = np.hstack((result, np.array([data['t']])))
             filtered_state_x = np.hstack((filtered_state_x, np.array([data['t']])))
             # result= np.hstack((np.array(position).squeeze(),orientation,data['t']))
             self.results_np = result if self.results_np is None else np.vstack((self.results_np, result))
@@ -120,9 +120,6 @@ class VisualLocalization:
         self.pf = ParticleFilter(
             num_particles=1000,
             state_dim=15,
-            process_model=self.process_model,
-            measurement_model=self.measurement_model,
-            init_state_sampler=self.init_sampler
         )
 
     def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
@@ -227,20 +224,70 @@ class VisualLocalization:
         plt.title('Trajectory Comparison')
         plt.show()
 
-    def plot_euler_angles(self, estimated_orientations, true_orientations):
-        """Plots estimated and ground truth Euler angles."""
-        angles = ['Roll', 'Pitch', 'Yaw']
-        plt.figure()
-        for i in range(3):
-            plt.subplot(3, 1, i + 1)
-            # plt.plot(true_orientations[:, i].T, label='Ground Truth')
-            plt.plot(true_orientations[-1, :], true_orientations[i, :], label='Ground Truth')
-            plt.plot(estimated_orientations.T[-1, :], estimated_orientations.T[i+3, :], label='Estimated')
-            plt.ylabel(angles[i])
-            plt.legend()
-        plt.xlabel('Time')
-        plt.suptitle('Euler Angles Comparison')
-        plt.show()
+    # def plot_euler_angles(self, estimated_orientations, true_orientations):
+    #     """Plots estimated and ground truth Euler angles."""
+    #     angles = ['Roll', 'Pitch', 'Yaw']
+    #     plt.figure()
+    #     for i in range(3):
+    #         plt.subplot(3, 1, i + 1)
+    #         # plt.plot(true_orientations[:, i].T, label='Ground Truth')
+    #         plt.plot(true_orientations[-1, :], true_orientations[i, :], label='Ground Truth')
+    #         plt.plot(estimated_orientations.T[-1, :], estimated_orientations.T[i+3, :], label='Estimated')
+    #         plt.ylabel(angles[i])
+    #         plt.legend()
+    #     plt.xlabel('Time')
+    #     plt.suptitle('Euler Angles Comparison')
+    #     plt.show()
+
+    def plot_orientation(self):
+        
+        roll  = self.actual_vicon_np[3, :]
+        pitch = self.actual_vicon_np[4, :]
+        yaw   = self.actual_vicon_np[5, :]
+        x = self.actual_vicon_np[-1, :]
+        
+        
+        # Plot the trajectory
+        self.fig, self.axs = plt.subplots(3, 1, figsize=(16, 16))
+        self.fig.suptitle('Roll / Pitch / Yaw Plot')
+        # x = self.results_filtered_np.T.squeeze()[0,:]
+        # y = self.results_filtered_np.T.squeeze()[1,:]
+        # z = self.results_filtered_np.T.squeeze()[2,:]
+        
+        # Plot the trajectory
+        self.axs[0].plot(x, roll, label='Actual', color='b', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[0].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[3,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[0].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[3,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
+
+        self.axs[1].plot(x, pitch, label='Actual', color='b', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[1].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[4,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[1].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[4,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
+
+        self.axs[2].plot(x, yaw, label='Actresults_filtered_npual', color='b', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[2].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[5,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[2].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[5,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
+        
+        # Set labels and title
+        self.axs[0].set_xlabel('Time')
+        self.axs[0].set_ylabel('Roll (rad)')
+        self.axs[0].set_title('Roll Plot')
+        self.axs[0].legend()
+        self.axs[1].set_xlabel('Time')
+        self.axs[1].set_ylabel('Pitch (rad)')
+        self.axs[1].set_title('Pitch Plot')
+        self.axs[1].legend()
+        self.axs[2].set_xlabel('Time')
+        self.axs[2].set_ylabel('Yaw (rad)')
+        self.axs[2].set_title('Yaw Plot')    
+        self.axs[2].legend()
+        plt.subplots_adjust(wspace=0.4, hspace=0.6) # Adjust values as needed
+        
+        # Show the plot
+        # if self.ukf_or_particle_filter != "UKF":
+        #     self.fig.savefig(f"./plots/{self.ukf_or_particle_filter}_{self.particle_count}_{self.file}_orientation_plot.png", dpi=300, bbox_inches='tight')    
+        # else:
+        #     self.fig.savefig(f"./plots/{self.ukf_or_particle_filter}_{self.file}_orientation_plot.png", dpi=300, bbox_inches='tight')
+        # plt.close(self.fig)
 
     def interpolate(self, time_target, t1, t2,y1, y2):
         """Interpolate between two points."""

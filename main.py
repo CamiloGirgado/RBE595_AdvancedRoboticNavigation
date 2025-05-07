@@ -37,24 +37,24 @@ def run_UKF():
     # results.append(execute_UKF('data/studentdata5.mat'))
     # results.append(execute_UKF('data/studentdata6.mat'))
     # results.append(execute_UKF('data/studentdata7.mat'))
-    print("UKF RMSE:", sum(results/len(results)))
+    print("UKF RMSE:", sum(results)/len(results))
 
 def run_PF(particle_count):
     results = []
     particles = 250
     results.append(execute_PF('data/studentdata0.mat'))
-    results.append(execute_PF('data/studentdata1.mat'))
-    results.append(execute_PF('data/studentdata2.mat'))
-    results.append(execute_PF('data/studentdata3.mat'))
-    results.append(execute_PF('data/studentdata4.mat'))
-    results.append(execute_PF('data/studentdata5.mat'))
-    results.append(execute_PF('data/studentdata6.mat'))
-    results.append(execute_PF('data/studentdata7.mat'))
+    # results.append(execute_PF('data/studentdata1.mat'))
+    # results.append(execute_PF('data/studentdata2.mat'))
+    # results.append(execute_PF('data/studentdata3.mat'))
+    # results.append(execute_PF('data/studentdata4.mat'))
+    # results.append(execute_PF('data/studentdata5.mat'))
+    # results.append(execute_PF('data/studentdata6.mat'))
+    # results.append(execute_PF('data/studentdata7.mat'))
     print("PF RMSE with Particles - {particle_count}:", sum(results)/len(results))
 
 if __name__ == "__main__":
     run_UKF()
-    # run_PF(250)
+    run_PF(250)
     # run_PF(500)
     # run_PF(750)
     # run_PF(1000)

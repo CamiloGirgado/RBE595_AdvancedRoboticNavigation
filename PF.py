@@ -4,24 +4,27 @@ from scipy.spatial.transform import Rotation as R
 
 # -------------------- Particle Filter --------------------
 class ParticleFilter:
-    def __init__(self, num_particles, state_dim, process_model, measurement_model, init_state_sampler):
+    def __init__(self, num_particles, state_dim):
         self.num_particles = num_particles
         self.state_dim = state_dim
+        # self.R = self.P_Matrix()
         self.mean_init = np.zeros(15)
         self.cov_init = np.eye(15)*0.0015
         self.particles = self.init_state_sampler(num_particles, state_dim)
         self.weights = np.ones(num_particles) / num_particles
         self.process_model = self.fx
-        self.measurement_cov = np.eye(6)*0.001
-        self.Nbg = np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qg)
-        self.Nba = np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qa)
+
         sigma_bg_x = 0.2
         sigma_bg_y = 0.2
         sigma_bg_z = 5.5
         sigma_ba_x = 0.2
         sigma_ba_y = 0.2
         sigma_ba_z = 5.5
-        self.Q = np.diag([sigma_bg_x**2, sigma_bg_y**2, sigma_bg_z**2, sigma_ba_x**2, sigma_ba_y**2, sigma_ba_z**2])
+        self.Qg = np.diag([sigma_bg_x**2, sigma_bg_y**2, sigma_bg_z**2])    # OMG bias noise covariance
+        self.Qa = np.diag([sigma_ba_x**2, sigma_ba_y**2, sigma_ba_z**2])    # ACC bias noise covariance
+        self.Nbg = np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qg)
+        self.Nba = np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qa)
+
         self.H = np.array([[1, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -30,6 +33,7 @@ class ParticleFilter:
             [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             ])
     
+        self.measurement_cov = np.eye(6)*0.001
     
     def particle_filter_predict(self, dt=1, control_input=None):
         for i in range(self.num_particles):
@@ -64,6 +68,13 @@ class ParticleFilter:
         self.weights = new_weights
 
     def sampling(self):
+        indices = np.random.choice(
+            self.num_particles, size=self.num_particles, p=self.weights
+        )
+        self.particles = self.particles[indices]
+        self.weights = np.ones(self.num_particles) / self.num_particles
+
+    def estimate(self):
         all = np.average(self.particles, weights=self.weights, axis=0)
 
         sin_roll  = np.average(np.sin(self.particles[:, 3]), weights=self.weights)
@@ -88,52 +99,43 @@ class ParticleFilter:
 
     def fx(self, x, dt, data):
         xout = x.copy()
-        U_w = (np.array([data['omg']])).T
-        U_a = (np.array([data['acc']])).T
-
-        xout[0] = x[6]*dt + x[0]
-        xout[1] = x[7]*dt + x[1]
-        xout[2] = x[8]*dt + x[2]
-        G_matrix = self.G_Matrix(x[3:6])
-        q_dot = np.linalg.inv(G_matrix) @ U_w
-        xout[3:6] = q_dot.squeeze()
-        Rq_matrix = self.Rq_matrix(data[['rpy']])
-        xout[6:9] = (Rq_matrix @ U_a + g).squeeze()
-        
+        if data.get('omg') is None or data.get('acc') is None:
+            return xout
         omg_bias = x[9:12]
         acc_bias = x[12:15]
         updated_omg_bias = omg_bias + np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qg)*dt
         updated_acc_bias = acc_bias + np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qa)*dt
-
+        
         xout[9:12] = updated_omg_bias
         xout[12:15] = updated_acc_bias
 
-        G = self.G_Matrix(x[3:6])
         U_w = (np.array([data['omg']]) + updated_omg_bias).T
-        q_dot = np.linalg.inv(G) @ U_w
-        xout[3:6] = q_dot.squeeze()
         U_a = (np.array([data['acc']]) + updated_acc_bias ).T
 
-        # Rq_matrix = self.Rq_matrix(data['rpy'])
-        Rq_matrix = self.Rq_matrix(x[3:6])
+        xout[0] = x[6]*dt + x[0]
+        xout[1] = x[7]*dt + x[1]
+        xout[2] = x[8]*dt + x[2]
         g = np.array([[0, 0, 9.81]]).T
-        # xout[6:9] = (Rq_matrix.T @ (U_a - g)).squeeze()
-        xout[6:9] = (Rq_matrix.T @ (U_a - g)).squeeze()
+        G_matrix = self.G_Matrix(x[3:6])
+        q_dot = np.linalg.inv(G_matrix) @ U_w
+        xout[3:6] = q_dot.squeeze()
+        Rq_matrix = self.Rq_matrix(x[3:6])
+        xout[6:9] = (Rq_matrix @ U_a + g).squeeze()
         
-        xout[0] = xout[6] * dt + x[0]
-        xout[1] = xout[7] * dt + x[1]
-        xout[2] = xout[8] * dt + x[2]
+
+
+
+
 
         return xout
     
-    def Rq_matrix(self, data):
-        rpy = data['rpy']
+    def Rq_matrix(self, rpy):
         rotation_x = R.from_euler('x', rpy[0], degrees=False).as_matrix()
         rotation_y = R.from_euler('y', rpy[1], degrees=False).as_matrix()
         rotation_z = R.from_euler('z', rpy[2], degrees=False).as_matrix()
-        R = rotation_z @ rotation_y @ rotation_x
+        self.R = rotation_z @ rotation_y @ rotation_x
         
-        return R
+        return self.R
         
     def G_Matrix(self, rpy):
         roll = rpy[0]
