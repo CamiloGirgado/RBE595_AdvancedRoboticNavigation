@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import os
 from scipy.spatial.transform import Rotation as R
 
-class observationModel_1:
+class observationModel:
     def __init__(self,ax=None, fig=None):
         self.ax = ax
         self.fig = fig
