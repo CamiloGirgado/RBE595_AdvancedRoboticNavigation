@@ -1,152 +1,158 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from math import sin, cos, tan, atan2
 
-# Vehicle geometry
-L = 2.83  # wheelbase in meters
+# Constants
+L = 2.83  # wheelbase
+MAX_RANGE = 80.0  # max lidar range in meters
+ANGLE_MIN = -np.pi / 2
+ANGLE_MAX = np.pi / 2
+NUM_BEAMS = 361
+beam_angles = np.linspace(ANGLE_MIN, ANGLE_MAX, NUM_BEAMS)
 
-# Load and resample data
-file_path = r"C:\Users\camil\Documents\WPI\RBE595-ARN\Assignment 4\victoria_park.csv"
-data_in = pd.read_csv(file_path, index_col=0)
-data_in.index = pd.to_timedelta(data_in.index, unit='s')
-data_in = data_in.resample('1s').mean()
+# Load data
+csv_path = r'C:/Users/camil/Documents/WPI/RBE595-ARN/Assignment 4/victoria_park.csv'
+data = pd.read_csv(csv_path, index_col=0)
+data.index = pd.to_timedelta(data.index, unit='s')
+data = data.resample('1s').mean().interpolate()
 
-# Extract input measurements
-steering = np.deg2rad(data_in['steering'].values)  # convert degrees to radians
-speed = data_in['speed'].values
-laser_scans = data_in.filter(like='laser').values
+# Helpers
+def deg2meters(lat, lon):
+    lat_scale = 111320
+    lon_scale = 111320 * np.cos(np.radians(lat))
+    return lat * lat_scale, lon * lon_scale
 
-# Initial state: robot pose only
-x = np.array([0.0, 0.0, 0.0])  # [x, y, yaw]
-P = np.eye(3) * 0.1  # initial covariance for robot pose
+def motion_model(mu, u, dt):
+    x, y, theta = mu[0:3]
+    v, delta = u
+    x += v * np.cos(theta) * dt
+    y += v * np.sin(theta) * dt
+    theta += (v / L) * np.tan(delta) * dt
+    mu[0:3] = [x, y, theta]
+    return mu
 
-# Full SLAM state and covariance
-state = x.copy()
-cov = P.copy()
+def normalize_angle(angle):
+    return (angle + np.pi) % (2 * np.pi) - np.pi
 
-# Landmark bookkeeping
-landmark_ids = {}  # maps landmark indices to their positions in the state vector
-
-# Parameters
-Q = np.diag([0.2, 0.2, np.deg2rad(1)]) ** 2  # process noise
-R = np.diag([1.0, np.deg2rad(10)]) ** 2  # measurement noise
-
-# Motion model
-def motion_model(x, v, delta, dt):
-    x_pos, y_pos, yaw = x
-    dx = v * cos(yaw) * dt
-    dy = v * sin(yaw) * dt
-    dtheta = (v / L) * tan(delta) * dt
-    return np.array([x_pos + dx, y_pos + dy, yaw + dtheta])
-
-# Jacobian of motion model
-def jacobian_motion(x, v, delta, dt):
-    theta = x[2]
-    dx_dtheta = -v * sin(theta) * dt
-    dy_dtheta = v * cos(theta) * dt
-    G = np.eye(len(x))
-    G[0, 2] = dx_dtheta
-    G[1, 2] = dy_dtheta
-    return G
-
-# Extract landmarks from laser scan
-def extract_landmarks(scan_row):
-    angles = np.linspace(-np.pi/2, np.pi/2, len(scan_row))
-    landmarks = []
-    for r, theta in zip(scan_row, angles):
-        if 0.5 < r < 30.0:
-            lx = r * np.cos(theta)
-            ly = r * np.sin(theta)
-            landmarks.append([lx, ly])
-    return np.array(landmarks)
-
-# EKF SLAM main loop
+# Initialization
 dt = 1.0
+mu = np.zeros(3)  # initial state: x, y, theta
+Sigma = np.eye(3) * 0.1
+R = np.diag([0.5, 0.5, np.deg2rad(1.0)])**2
+Q_gps = np.diag([15.0, 15.0])**2
+Q_lidar = np.diag([1.0, np.deg2rad(2.0)])**2
+
 trajectory = []
+gps_trace = []
 
-for i in range(len(speed)):
-    v = speed[i]
-    delta = steering[i]
-    
-    ### Prediction step
-    robot_state = state[:3]
-    robot_state = motion_model(robot_state, v, delta, dt)
-    G = jacobian_motion(state[:3], v, delta, dt)
+# Map storage
+landmarks = {}  # landmark_id: index in state
+next_landmark_id = 0
 
-    Fx = np.hstack((np.eye(3), np.zeros((3, len(state) - 3))))
-    state[:3] = robot_state
-    cov = Fx.T @ G @ Fx @ cov @ Fx.T @ G.T @ Fx + Fx.T @ Q @ Fx
+# SLAM loop
+for _, row in data.iterrows():
+    v = row['speed']
+    delta = row['steering']
+    u = [v, delta]
 
-    ### Update step
-    observed_landmarks = extract_landmarks(laser_scans[i])
-    robot_x, robot_y, robot_theta = state[0:3]
+    # Predict
+    mu = motion_model(mu, u, dt)
+    theta = mu[2]
+    Fx = np.eye(len(mu))
+    Fx[0:3, 0:3] = np.array([
+        [1, 0, -v * np.sin(theta) * dt],
+        [0, 1,  v * np.cos(theta) * dt],
+        [0, 0, 1]
+    ])
+    Sigma = Fx @ Sigma @ Fx.T + np.pad(R, ((0, Sigma.shape[0] - 3), (0, Sigma.shape[1] - 3)))
 
-    for lm in observed_landmarks:
-        # Transform to world frame
-        R_theta = np.array([[cos(robot_theta), -sin(robot_theta)],
-                            [sin(robot_theta),  cos(robot_theta)]])
-        lm_world = R_theta @ lm + state[:2]
-        lm_key = tuple(np.round(lm_world, 1))  # hashable approx key
+    # GPS update
+    if not np.isnan(row['latitude']) and not np.isnan(row['longitude']):
+        z_gps = np.array(deg2meters(row['latitude'], row['longitude']))
+        H = np.zeros((2, len(mu)))
+        H[:, 0:2] = np.eye(2)
+        z_hat = mu[0:2]
+        y = z_gps - z_hat
+        S = H @ Sigma @ H.T + Q_gps
+        K = Sigma @ H.T @ np.linalg.inv(S)
+        mu += K @ y
+        Sigma = (np.eye(len(mu)) - K @ H) @ Sigma
+        gps_trace.append(z_gps)
 
-        if lm_key not in landmark_ids:
-            # New landmark: augment state and covariance
-            landmark_ids[lm_key] = len(state)
-            state = np.hstack((state, lm_world))
-            Lm = len(state)
-            cov = np.pad(cov, ((0, 2), (0, 2)), 'constant')
-            cov[Lm-2:Lm, Lm-2:Lm] = np.eye(2) * 1e2  # high initial uncertainty
+    # Lidar updates
+    for i in range(NUM_BEAMS):
+        beam_col = f'laser_{i}'
+        if beam_col not in row or np.isnan(row[beam_col]):
+            continue
+        r = row[beam_col]
+        if r <= 1.0 or r >= MAX_RANGE:
             continue
 
-        lm_index = landmark_ids[lm_key]
-        lx, ly = state[lm_index:lm_index+2]
+        angle = beam_angles[i] + mu[2]
+        lx = mu[0] + r * np.cos(angle)
+        ly = mu[1] + r * np.sin(angle)
+        landmark_pos = np.array([lx, ly])
 
-        # Expected measurement
-        dx = lx - robot_x
-        dy = ly - robot_y
-        r = np.sqrt(dx**2 + dy**2)
-        phi = atan2(dy, dx) - robot_theta
-        z_hat = np.array([r, phi])
+        # Nearest neighbor association
+        associated = False
+        for lid, idx in landmarks.items():
+            lm = mu[idx:idx+2]
+            dist = np.linalg.norm(lm - landmark_pos)
+            if dist < 2.0:  # association threshold
+                dx, dy = lm - mu[0:2]
+                r_hat = np.sqrt(dx**2 + dy**2)
+                b_hat = normalize_angle(np.arctan2(dy, dx) - mu[2])
+                z_hat = np.array([r_hat, b_hat])
 
-        # Measurement Jacobian H
-        q = dx**2 + dy**2
-        sqrt_q = np.sqrt(q)
-        H = np.zeros((2, len(state)))
-        H[0, 0] = -dx / sqrt_q
-        H[0, 1] = -dy / sqrt_q
-        H[0, lm_index] = dx / sqrt_q
-        H[0, lm_index+1] = dy / sqrt_q
-        H[1, 0] = dy / q
-        H[1, 1] = -dx / q
-        H[1, 2] = -1
-        H[1, lm_index] = -dy / q
-        H[1, lm_index+1] = dx / q
+                H = np.zeros((2, len(mu)))
+                q = dx**2 + dy**2
+                H[0, 0] = -dx / np.sqrt(q)
+                H[0, 1] = -dy / np.sqrt(q)
+                H[0, idx] = dx / np.sqrt(q)
+                H[0, idx+1] = dy / np.sqrt(q)
+                H[1, 0] = dy / q
+                H[1, 1] = -dx / q
+                H[1, 2] = -1
+                H[1, idx] = -dy / q
+                H[1, idx+1] = dx / q
 
-        # Innovation
-        z = np.array([np.linalg.norm(lm), atan2(lm[1], lm[0])])
-        y = z - z_hat
-        y[1] = (y[1] + np.pi) % (2*np.pi) - np.pi  # wrap angle
+                z = np.array([r, normalize_angle(angle - mu[2])])
+                y = z - z_hat
+                y[1] = normalize_angle(y[1])
+                S = H @ Sigma @ H.T + Q_lidar
+                K = Sigma @ H.T @ np.linalg.inv(S)
+                mu += K @ y
+                Sigma = (np.eye(len(mu)) - K @ H) @ Sigma
+                associated = True
+                break
 
-        S = H @ cov @ H.T + R
-        K = cov @ H.T @ np.linalg.inv(S)
+        if not associated:
+            # Initialize new landmark
+            mu = np.concatenate([mu, landmark_pos])
+            idx = len(mu) - 2
+            landmarks[next_landmark_id] = idx
+            next_landmark_id += 1
 
-        # Update
-        state += K @ y
-        cov = (np.eye(len(state)) - K @ H) @ cov
+            # Expand Sigma
+            Sigma = np.pad(Sigma, ((0, 2), (0, 2)), 'constant')
+            Sigma[idx:idx+2, idx:idx+2] = np.eye(2) * 5.0
 
-    trajectory.append(state[:3].copy())
+    trajectory.append(mu[0:2])
 
+# --- Plot Results ---
 trajectory = np.array(trajectory)
+gps_trace = np.array(gps_trace)
 
-# Plot
-plt.figure(figsize=(12, 12))
-plt.plot(trajectory[:, 0], trajectory[:, 1], label='Vehicle Path')
-for key, idx in landmark_ids.items():
-    plt.plot(state[idx], state[idx + 1], 'r*', markersize=5)
-plt.xlabel('X [m]')
-plt.ylabel('Y [m]')
-plt.title('EKF SLAM - Victoria Park')
+plt.figure(figsize=(12, 9))
+plt.plot(trajectory[:, 0], trajectory[:, 1], label='EKF SLAM Trajectory')
+plt.plot(gps_trace[:, 0], gps_trace[:, 1], 'r.', alpha=0.4, label='GPS')
+for lid, idx in landmarks.items():
+    plt.plot(mu[idx], mu[idx+1], 'go', markersize=3)
+plt.title("EKF SLAM with Lidar Landmarks")
+plt.xlabel("X [m]")
+plt.ylabel("Y [m]")
 plt.axis('equal')
-plt.grid()
+plt.grid(True)
 plt.legend()
+plt.tight_layout()
 plt.show()
