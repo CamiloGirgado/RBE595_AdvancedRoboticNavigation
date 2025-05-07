@@ -3,19 +3,20 @@ import cv2
 import scipy.io
 import matplotlib.pyplot as plt
 import os
+from matlab_data import matlab_data
 from observationModel_1 import observationModel
-from UKF import UnscentedKalmanFilter
+from UKF import UKF
 from PF import ParticleFilter
 
 class VisualLocalization:
     def __init__(self, file):
-        self.mat_contents = None
+        # self.mat_contents = None
+        self.data = matlab_data(file).get_data()
         self.actual_vicon_np = None
         self.results_np = None
         self.actual_vicon_aligned_np = None
         self.diff_matrix = None
         self.cov_matrix = None
-        self.loadMatlabData(file)
         self.file = file
         self.ukf_or_particle_filter = "UKF"
         self.particle_count = 0
@@ -26,11 +27,13 @@ class VisualLocalization:
         self.ax = None
         self.fig = None
         self.axs = None
+        # self.true_positions = None
+        self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
 
     def run_UKF(self):
         observationModel_1 = observationModel()
         position = None
-        UKF = UnscentedKalmanFilter(self.mat_contents)
+        ukf = UKF(self.data)
         self.time = []
         self.results_np = None
         self.results_filtered_np = None
@@ -38,7 +41,7 @@ class VisualLocalization:
         is_initialized = False
         dt = 0.
         time_last = 0.
-        for data in self.mat_contents['data']:
+        for data in self.data['data']:
             if isinstance(data['id'],np.ndarray):
                 # This has no April tags found in the image
                 if len(data['id']) == 0:
@@ -51,16 +54,18 @@ class VisualLocalization:
                 continue  # Skip this item if pose estimation failed
             dt = data['t'] - time_last
             time_last = data['t']
-            filtered_state_x = UKF.predict(dt,data)
+            # if data.get('omg') is None:
+            #     continue
+            filtered_state_x = ukf.predict(dt,data)
             
             z = np.hstack((np.array(position).T,orientation))
-            filtered_state_x = UKF.update(z.T)
+            filtered_state_x = ukf.update(z.T)
             result = np.hstack((np.array(position).T,orientation))
-            result = np.hstack((result, np.array([[data['t']]])))
+            result = np.hstack((result, np.array([data['t']])))
             filtered_state_x = np.hstack((filtered_state_x, np.array([data['t']])))
             # result= np.hstack((np.array(position).squeeze(),orientation,data['t']))
             self.results_np = result if self.results_np is None else np.vstack((self.results_np, result))
-            self.results_filtered_np= filtered_state_x if self.results_filtered_np is None else np.vstack((self.results_filtered_np, filtered_state_x))
+            self.results_filtered_np = filtered_state_x if self.results_filtered_np is None else np.vstack((self.results_filtered_np, filtered_state_x))
         return self.results_np
 
     def run_PF(self,particle_count=0):
@@ -79,7 +84,7 @@ class VisualLocalization:
         is_initialized = False
         dt = 0.
         time_last = 0.
-        for data in self.mat_contents['data']:
+        for data in self.data['data']:
             if isinstance(data['id'],np.ndarray):
                 # This has no April tags found in the image
                 if len(data['id']) == 0:
@@ -153,7 +158,7 @@ class VisualLocalization:
             # true_orientations.extend(vicon[3:5, :])
             true_orientations.extend(np.vstack((vicon[3:6, :],np.array([time_stamps]))))
             for entry in dataset:
-                position, orientation = estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
+                position, orientation = VisualLocalization.estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
                 if position is not None:
                     estimated = np.hstack((position, orientation))
                     estimated = np.hstack((estimated, entry['t']))
@@ -207,7 +212,22 @@ class VisualLocalization:
         self.ax.legend()
         plt.show()
 
-    def plot_euler_angles(estimated_orientations, true_orientations):
+    def plot_trajectory(self):
+        """Plots the estimated trajectory against the ground truth."""
+        estimated_positions = self.results_filtered_np.T.squeeze()[0:3,:]
+        true_positions = self.actual_vicon_np[0:3,:]
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
+        ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
+        ax.legend()
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        plt.title('Trajectory Comparison')
+        plt.show()
+
+    def plot_euler_angles(self, estimated_orientations, true_orientations):
         """Plots estimated and ground truth Euler angles."""
         angles = ['Roll', 'Pitch', 'Yaw']
         plt.figure()
@@ -222,7 +242,7 @@ class VisualLocalization:
         plt.suptitle('Euler Angles Comparison')
         plt.show()
 
-    def interpolate(time_target,t1, t2,y1, y2):
+    def interpolate(self, time_target, t1, t2,y1, y2):
         """Interpolate between two points."""
         interpolated_data = y1 + ((time_target - t1) * (y2 - y1) / (t2 - t1))
         return interpolated_data
@@ -239,12 +259,12 @@ class VisualLocalization:
             # Find the closest estimated timestamp
             estimated_time = float(estimated_data[-1])
             closest_idx = np.argmin(true_positions[-1, :]< estimated_time)
-            interpolated_x = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[0,closest_idx-1], true_positions[0,closest_idx])
-            interpolated_y = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[1,closest_idx-1], true_positions[1,closest_idx])
-            interpolated_z = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[2,closest_idx-1], true_positions[2,closest_idx])    
-            interpolated_roll = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[3,closest_idx-1], true_positions[3,closest_idx])    
-            interpolated_pitch = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[4,closest_idx-1], true_positions[4,closest_idx])    
-            interpolated_yaw = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[5,closest_idx-1], true_positions[5,closest_idx])    
+            interpolated_x = VisualLocalization.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[0,closest_idx-1], true_positions[0,closest_idx])
+            interpolated_y = VisualLocalization.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[1,closest_idx-1], true_positions[1,closest_idx])
+            interpolated_z = VisualLocalization.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[2,closest_idx-1], true_positions[2,closest_idx])    
+            interpolated_roll = VisualLocalization.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[3,closest_idx-1], true_positions[3,closest_idx])    
+            interpolated_pitch = VisualLocalization.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[4,closest_idx-1], true_positions[4,closest_idx])    
+            interpolated_yaw = VisualLocalization.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[5,closest_idx-1], true_positions[5,closest_idx])    
             interpolated_data.append(np.array([interpolated_x, interpolated_y, interpolated_z, interpolated_roll, interpolated_pitch, interpolated_yaw, estimated_time]))
 
         return np.array(interpolated_data) if interpolated_data else None
@@ -255,8 +275,8 @@ class VisualLocalization:
 
         true_data = np.vstack((true_positions, true_orientations))
 
-        interpolated_data = interpolate_data(estimated_all, true_data)
-        if interpolate_data is None:
+        interpolated_data = VisualLocalization.interpolate_data(estimated_all, true_data)
+        if interpolated_data is None:
             return None
         print("Interpolated Data Shape:", interpolated_data.shape)
         print("Estimated Data Shape:", estimated_all.shape)
@@ -352,32 +372,3 @@ class VisualLocalization:
             print("RMSE difference: ", rmse_difference)
             return rmse_difference
 
-# Main execution
-camera_matrix = np.array([
-        [314.1779, 0, 199.4848],
-        [0, 314.2218, 113.7838],
-        [0, 0, 1]
-    ], dtype=np.float32)
-
-dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
-tag_corners_world = generate_tag_corners()
-data_folder = "/home/camilo/dev/RBE_595_ARN/data"  # Updated to correct folder path
-estimated_data, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
-
-if estimated_data is not None and estimated_data.size > 0:
-    plot_trajectory(estimated_data, true_positions)
-    plot_euler_angles(estimated_data, true_orientations)
-    R_matrix = compute_covariance(estimated_data, true_positions, true_orientations)
-    print("Covariance Matrix:\n", R_matrix)
-else:
-    print("No valid estimated positions found.")
-
-def test_april_tags(tag_ids, tag_corners_world):
-    """Prints the world coordinates of multiple AprilTags."""
-    for tag_id in tag_ids:
-        if tag_id in tag_corners_world:
-            print(f"AprilTag {tag_id} Coordinates:\n", tag_corners_world[tag_id], "\n")
-        else:
-            print(f"AprilTag {tag_id} not found!\n")
-
-test_april_tags([0, 12, 24, 36, 48, 60, 72, 84, 96], tag_corners_world)  # Change IDs as needed

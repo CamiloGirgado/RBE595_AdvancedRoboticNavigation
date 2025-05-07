@@ -15,7 +15,7 @@ class observationModel:
             [0.0, 0.0, 1.0]
         ], dtype=np.float64)
         self.dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float64)
-        
+        self.tag_corners_world = observationModel.generate_tag_corners()
         self.actual_vicon_np = None
 
     def generate_tag_corners():
@@ -52,7 +52,7 @@ class observationModel:
     
         return tag_corners_world
 
-    def estimate_pose(data, camera_matrix, dist_coeffs, tag_corners_world):
+    def estimate_pose(self, data):
         # Debugging: Check structure
         print("Data keys:", data.keys())
         print("ID Type:", type(data['id']))
@@ -61,21 +61,21 @@ class observationModel:
         img_points = []
 
         if isinstance(data['id'], int): # or len(data['id']) == 0:
-            obj_points.append(tag_corners_world[data['id']])
+            obj_points.append(self.tag_corners_world[data['id']])
             img_points.append(
                     np.array([data['p1'], data['p2'], data['p3'], data['p4']]))
         elif len(data['id']) == 0:
             return None, None
         else:
             for i, tag_id in enumerate(data['id']):
-                if tag_id in tag_corners_world:
-                    obj_points.append(tag_corners_world[tag_id])
+                if tag_id in self.tag_corners_world:
+                    obj_points.append(self.tag_corners_world[tag_id])
                     img_points.append(
                         np.array([data['p1'][:, i], data['p2'][:, i], data['p3'][:, i], data['p4'][:, i]]))
 
         obj_points = np.array(obj_points, dtype=np.float32).reshape(-1, 3)
         img_points = np.array(img_points, dtype=np.float32).reshape(-1, 2)
-        success, rvec, tvec = cv2.solvePnP(obj_points, img_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+        success, rvec, tvec = cv2.solvePnP(obj_points, img_points, self.camera_matrix, self.dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
 
         if not success:
             return None, None
@@ -136,7 +136,7 @@ class observationModel:
             # true_orientations.extend(vicon[3:5, :])
             true_orientations.extend(np.vstack((vicon[3:6, :],np.array([time_stamps]))))
             for entry in dataset:
-                position, orientation = estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
+                position, orientation = observationModel.estimate_pose(entry, camera_matrix, dist_coeffs, tag_corners_world)
                 if position is not None:
                     estimated = np.hstack((position, orientation))
                     estimated = np.hstack((estimated, entry['t']))
@@ -192,12 +192,12 @@ class observationModel:
             # Find the closest estimated timestamp
             estimated_time = float(estimated_data[-1])
             closest_idx = np.argmin(true_positions[-1, :]< estimated_time)
-            interpolated_x = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[0,closest_idx-1], true_positions[0,closest_idx])
-            interpolated_y = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[1,closest_idx-1], true_positions[1,closest_idx])
-            interpolated_z = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[2,closest_idx-1], true_positions[2,closest_idx])    
-            interpolated_roll = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[3,closest_idx-1], true_positions[3,closest_idx])    
-            interpolated_pitch = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[4,closest_idx-1], true_positions[4,closest_idx])    
-            interpolated_yaw = interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[5,closest_idx-1], true_positions[5,closest_idx])    
+            interpolated_x = observationModel.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[0,closest_idx-1], true_positions[0,closest_idx])
+            interpolated_y = observationModel.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[1,closest_idx-1], true_positions[1,closest_idx])
+            interpolated_z = observationModel.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[2,closest_idx-1], true_positions[2,closest_idx])    
+            interpolated_roll = observationModel.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[3,closest_idx-1], true_positions[3,closest_idx])    
+            interpolated_pitch = observationModel.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[4,closest_idx-1], true_positions[4,closest_idx])    
+            interpolated_yaw = observationModel.interpolate(estimated_time, true_positions[-1, closest_idx-1], true_positions[-1, closest_idx], true_positions[5,closest_idx-1], true_positions[5,closest_idx])    
             interpolated_data.append(np.array([interpolated_x, interpolated_y, interpolated_z, interpolated_roll, interpolated_pitch, interpolated_yaw, estimated_time]))
 
         return np.array(interpolated_data) if interpolated_data else None
@@ -207,8 +207,8 @@ class observationModel:
 
         true_data = np.vstack((true_positions, true_orientations))
 
-        interpolated_data = interpolate_data(estimated_all, true_data)
-        if interpolate_data is None:
+        interpolated_data = observationModel.interpolate_data(estimated_all, true_data)
+        if observationModel.interpolate_data is None:
             return None
         print("Interpolated Data Shape:", interpolated_data.shape)
         print("Estimated Data Shape:", estimated_all.shape)
@@ -228,32 +228,32 @@ class observationModel:
 
         return R_matrix
 
-# Main execution
-camera_matrix = np.array([
-        [314.1779, 0, 199.4848],
-        [0, 314.2218, 113.7838],
-        [0, 0, 1]
-    ], dtype=np.float32)
+    # Main execution
+    #camera_matrix = np.array([
+    #       [314.1779, 0, 199.4848],
+    #       [0, 314.2218, 113.7838],
+    #       [0, 0, 1]
+    #   ], dtype=np.float32)
 
-dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
-tag_corners_world = generate_tag_corners()
-data_folder = "/home/camilo/dev/RBE_595_ARN/data"  # Updated to correct folder path
-estimated_data, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
+    #dist_coeffs = np.array([-0.438607, 0.248625, 0.00072, -0.000476, -0.0911], dtype=np.float32)
+    #tag_corners_world = generate_tag_corners()
+    #data_folder = "/home/camilo/dev/RBE_595_ARN/data"  # Updated to correct folder path
+    #estimated_data, true_positions, true_orientations = process_data(data_folder, camera_matrix, dist_coeffs, tag_corners_world)
 
-if estimated_data is not None and estimated_data.size > 0:
-    plot_trajectory(estimated_data, true_positions)
-    plot_euler_angles(estimated_data, true_orientations)
-    R_matrix = compute_covariance(estimated_data, true_positions, true_orientations)
-    print("Covariance Matrix:\n", R_matrix)
-else:
-    print("No valid estimated positions found.")
+    #if estimated_data is not None and estimated_data.size > 0:
+    #    plot_trajectory(estimated_data, true_positions)
+    #    plot_euler_angles(estimated_data, true_orientations)
+    #    R_matrix = compute_covariance(estimated_data, true_positions, true_orientations)
+    #    print("Covariance Matrix:\n", R_matrix)
+    #else:
+    #    print("No valid estimated positions found.")
 
-def test_april_tags(tag_ids, tag_corners_world):
-    """Prints the world coordinates of multiple AprilTags."""
-    for tag_id in tag_ids:
-        if tag_id in tag_corners_world:
-            print(f"AprilTag {tag_id} Coordinates:\n", tag_corners_world[tag_id], "\n")
-        else:
-            print(f"AprilTag {tag_id} not found!\n")
+    #def test_april_tags(tag_ids, tag_corners_world):
+    #    """Prints the world coordinates of multiple AprilTags."""
+    #    for tag_id in tag_ids:
+    #        if tag_id in tag_corners_world:
+    #           print(f"AprilTag {tag_id} Coordinates:\n", tag_corners_world[tag_id], "\n")
+    #        else:
+    #            print(f"AprilTag {tag_id} not found!\n")
 
-test_april_tags([0, 12, 24, 36, 48, 60, 72, 84, 96], tag_corners_world)  # Change IDs as needed
+    #test_april_tags([0, 12, 24, 36, 48, 60, 72, 84, 96], tag_corners_world)  # Change IDs as needed
