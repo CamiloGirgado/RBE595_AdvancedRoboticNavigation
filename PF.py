@@ -132,7 +132,6 @@ class ParticleFilter:
         rotation_y = R.from_euler('y', rpy[1], degrees=False).as_matrix()
         rotation_z = R.from_euler('z', rpy[2], degrees=False).as_matrix()
         R = rotation_z @ rotation_y @ rotation_x
-        check = R.from_matrix(self.R).as_euler('xyz', degrees=False)
         
         return R
         
