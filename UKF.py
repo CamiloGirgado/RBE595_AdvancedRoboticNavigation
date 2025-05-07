@@ -8,14 +8,15 @@ import filterpy.kalman
 from scipy.spatial.transform import Rotation as R
 from observationModel_1 import observationModel_1
 from filterpy.kalman import MerweScaledSigmaPoints
+from filterpy.kalman import JulierSigmaPoints
 
 
 class UnscentedKalmanFilter:
     def __init__(self, observationmodel_1):
         self.observationModel_1 = observationModel_1
+        points = JulierSigmaPoints(n=15, kappa=0.1)
         self.Q = np.eye(15)*0.0015
         self.Q[np.arange(6), np.arange(6)] = [0.015, 0.015, 0.015, 0.001, 0.001, 0.001]
-        R_meas = np.diag([0.1, 0.1, 0.1, 0.05, 0.05, 0.05])
         self.ukf = UnscentedKalmanFilter(dim_x=15, dim_z=6, dt=0.001, hx=self.hx, fx=self.fx, points=points)
         self.R = self.P_Matrix()
         self.ukf.R = self.R
@@ -52,6 +53,13 @@ class UnscentedKalmanFilter:
             [0, 1, np.sin(roll)],
             [np.sin(pitch), 0, np.cos(roll)*np.cos(pitch)],
             ])
+    
+    def check_covariance_matrix(self, matrix):
+        if np.allclose(matrix, matrix.T):
+            if self.debug:
+                print("Covariance matrix is symmetric.")
+        else:
+            print("Covariance matrix is not symmetric.")
     
     def hx(self, x):
         hx = self.H @ x

@@ -3,7 +3,7 @@ import cv2
 import scipy.io
 import matplotlib.pyplot as plt
 import os
-from observationModel_1 import observationModel_1
+from observationModel_1 import observationModel
 from UKF import UnscentedKalmanFilter
 from PF import ParticleFilter
 
@@ -16,6 +16,102 @@ class VisualLocalization:
         self.diff_matrix = None
         self.cov_matrix = None
         self.loadMatlabData(file)
+        self.file = file
+        self.ukf_or_particle_filter = "UKF"
+        self.particle_count = 0
+        self.pf = None
+        self.results_filtered_np = None
+        self.x = None
+        self.time = None
+        self.ax = None
+        self.fig = None
+        self.axs = None
+
+    def run_UKF(self):
+        observationModel_1 = observationModel()
+        position = None
+        UKF = UnscentedKalmanFilter(self.mat_contents)
+        self.time = []
+        self.results_np = None
+        self.results_filtered_np = None
+        self.x = np.zeros((15,1))
+        is_initialized = False
+        dt = 0.
+        time_last = 0.
+        for data in self.mat_contents['data']:
+            if isinstance(data['id'],np.ndarray):
+                # This has no April tags found in the image
+                if len(data['id']) == 0:
+                    continue
+            # Estimate the pose for each item in the data
+            position,orientation = observationModel_1.estimate_pose(data)  # Estimate the pose for each item in the data   
+
+            if position is None or orientation is None:
+                print("Warning: Pose estimation failed for the current data item. Skipping this item.")
+                continue  # Skip this item if pose estimation failed
+            dt = data['t'] - time_last
+            time_last = data['t']
+            filtered_state_x = UKF.predict(dt,data)
+            
+            z = np.hstack((np.array(position).T,orientation))
+            filtered_state_x = UKF.update(z.T)
+            result = np.hstack((np.array(position).T,orientation))
+            result = np.hstack((result, np.array([[data['t']]])))
+            filtered_state_x = np.hstack((filtered_state_x, np.array([data['t']])))
+            # result= np.hstack((np.array(position).squeeze(),orientation,data['t']))
+            self.results_np = result if self.results_np is None else np.vstack((self.results_np, result))
+            self.results_filtered_np= filtered_state_x if self.results_filtered_np is None else np.vstack((self.results_filtered_np, filtered_state_x))
+        return self.results_np
+
+    def run_PF(self,particle_count=0):
+        self.ukf_or_particle_filter = "ParticleFilter"
+        self.particle_count = particle_count
+        self.pf = ParticleFilter(
+            num_particles = particle_count,
+            state_dim=15
+        )
+        observationModel_1 = observationModel()
+        position = None
+        self.time = []
+        self.results_np = None
+        self.results_filtered_np = None
+        self.x = np.zeros((15,1))
+        is_initialized = False
+        dt = 0.
+        time_last = 0.
+        for data in self.mat_contents['data']:
+            if isinstance(data['id'],np.ndarray):
+                # This has no April tags found in the image
+                if len(data['id']) == 0:
+                    continue
+            # Estimate the pose for each item in the data
+            position,orientation = observationModel_1.estimate_pose(data)  # Estimate the pose for each item in the data   
+           
+            if position is None or orientation is None:
+                print("Warning: Pose estimation failed for the current data item. Skipping this item.")
+                continue  # Skip this item if pose estimation failed
+            dt = data['t'] - time_last
+            if time_last == 0. and not is_initialized:
+                dt = 0.001
+                self.pf.particles[:,0:3] = np.tile(position, self.pf.num_particles).T
+                self.pf.particles[:,3:6] = np.tile(orientation.T, self.pf.num_particles).T
+                is_initialized = True
+                # self.pf.particles[:,9:12] = np.array([[0.0001,0.0001,0.0001]]).T
+                # self.pf.particles[:,12:15] = np.array([[0.0001,0.0001,0.0001]]).T    
+            time_last = data['t']
+
+            self.pf.predict(dt,data)
+            z = np.hstack((np.array(position).T,orientation))
+            self.pf.update(z.T)
+            self.pf.resample()
+            filtered_state_x = self.pf.estimate()
+            result = np.hstack((np.array(position).T,orientation))
+            result = np.hstack((result, np.array([[data['t']]])))
+            filtered_state_x = np.hstack((filtered_state_x, np.array([data['t']])))
+            # result= np.hstack((np.array(position).squeeze(),orientation,data['t']))
+            self.results_np = result if self.results_np is None else np.vstack((self.results_np, result))
+            self.results_filtered_np= filtered_state_x if self.results_filtered_np is None else np.vstack((self.results_filtered_np, filtered_state_x))
+        
         self.pf = ParticleFilter(
             num_particles=1000,
             state_dim=15,
@@ -70,7 +166,7 @@ class VisualLocalization:
             break
         return estimated_all, np.array(true_positions), np.array(true_orientations)
 
-    def plot_trajectory(estimated_positions, true_positions):
+    def plot_trajectory_vicon(estimated_positions, true_positions):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
@@ -180,11 +276,7 @@ class VisualLocalization:
 
         return R_matrix
 
-    def calculate_rmse(self):
-            """
-            Calculate the covariance of the estimated trajectory.
-            :return: Covariance matrix.
-            """
+    def rmse(self):
             if self.results_filtered_np is None:
                 print("No results available to calculate RSME.")
                 return None
