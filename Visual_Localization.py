@@ -122,7 +122,7 @@ class VisualLocalization:
             state_dim=15,
         )
 
-    def process_data(directory, camera_matrix, dist_coeffs, tag_corners_world):
+    def process_data(self, directory, camera_matrix, dist_coeffs, tag_corners_world):
         """Processes all .mat files in the given directory and estimates pose."""
         estimated_positions = []
         estimated_orientations = []
@@ -168,11 +168,28 @@ class VisualLocalization:
             break
         return estimated_all, np.array(true_positions), np.array(true_orientations)
 
-    def plot_trajectory_vicon(estimated_positions, true_positions):
+    def plot_trajectory(self):
+        self.__plot_trajectory_vicon__()
+        self.__plot_trajectory_estimated__()
+        self.__plot_trajectory_estimated_filtered__()
+
+    def __plot_trajectory_vicon__(self):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
-        ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
+        
+        x = self.true_positions[0, :]
+        y = self.true_positions[1, :]
+        z = self.true_positions[2, :]
+
+        # Plot the trajectory
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Plot the trajectory
+        ax.plot(x, y, z, label='Actual', color='b', linewidth=2)  # Set color and linewidth for better visibility
+
+        # ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
+        # ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
         ax.legend()
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
@@ -181,7 +198,6 @@ class VisualLocalization:
         plt.show()
     
     def __plot_trajectory_estimated__(self):
-
         x = self.results_np.T.squeeze()[0,:]
         y = self.results_np.T.squeeze()[1,:]
         z = self.results_np.T.squeeze()[2,:]
@@ -209,20 +225,20 @@ class VisualLocalization:
         self.ax.legend()
         plt.show()
 
-    def plot_trajectory(self):
-        """Plots the estimated trajectory against the ground truth."""
-        estimated_positions = self.results_filtered_np.T.squeeze()[0:3,:]
-        true_positions = self.actual_vicon_np[0:3,:]
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
-        ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
-        ax.legend()
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        plt.title('Trajectory Comparison')
-        plt.show()
+    # def plot_trajectory(self):
+    #     """Plots the estimated trajectory against the ground truth."""
+    #     estimated_positions = self.results_filtered_np.T.squeeze()[0:3,:]
+    #     true_positions = self.actual_vicon_np[0:3,:]
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111, projection='3d')
+    #     ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
+    #     ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
+    #     ax.legend()
+    #     ax.set_xlabel('X')
+    #     ax.set_ylabel('Y')
+    #     ax.set_zlabel('Z')
+    #     plt.title('Trajectory Comparison')
+    #     plt.show()
 
     # def plot_euler_angles(self, estimated_orientations, true_orientations):
     #     """Plots estimated and ground truth Euler angles."""
@@ -250,9 +266,7 @@ class VisualLocalization:
         # Plot the trajectory
         self.fig, self.axs = plt.subplots(3, 1, figsize=(16, 16))
         self.fig.suptitle('Roll / Pitch / Yaw Plot')
-        # x = self.results_filtered_np.T.squeeze()[0,:]
-        # y = self.results_filtered_np.T.squeeze()[1,:]
-        # z = self.results_filtered_np.T.squeeze()[2,:]
+
         
         # Plot the trajectory
         self.axs[0].plot(x, roll, label='Actual', color='b', linewidth=1)  # Set color and linewidth for better visibility
