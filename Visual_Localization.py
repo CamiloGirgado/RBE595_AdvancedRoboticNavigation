@@ -18,7 +18,7 @@ class VisualLocalization:
         self.diff_matrix = None
         self.cov_matrix = None
         self.file = file
-        self.ukf_or_particle_filter = "UKF"
+        # self.ukf_or_particle_filter = "UKF"
         self.particle_count = 0
         self.pf = None
         self.results_filtered_np = None
@@ -30,16 +30,16 @@ class VisualLocalization:
         # self.true_positions = None
         self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
 
-    def loadMatlabData(self,file_name):
-        """
-        Load MATLAB data file.
-        :param file_name: Name of the MATLAB file to load.
-        :return: Loaded data.
-        """
-        mat_fname = pjoin(self.data_dir, file_name)
-        self.mat_contents = sio.loadmat(mat_fname, simplify_cells=True)
-        self.actual_vicon_np = np.vstack((self.mat_contents['vicon'], np.array([self.mat_contents['time']])))
-        return self.mat_contents
+    # def loadMatlabData(self,file_name):
+    #     """
+    #     Load MATLAB data file.
+    #     :param file_name: Name of the MATLAB file to load.
+    #     :return: Loaded data.
+    #     """
+    #     mat_fname = pjoin(self.data_dir, file_name)
+    #     self.mat_contents = sio.loadmat(mat_fname, simplify_cells=True)
+    #     self.actual_vicon_np = np.vstack((self.mat_contents['vicon'], np.array([self.mat_contents['time']])))
+    #     return self.mat_contents
     
     def run_UKF(self):
         observationModel_1 = observationModel()
@@ -127,17 +127,14 @@ class VisualLocalization:
             # result= np.hstack((np.array(position).squeeze(),orientation,data['t']))
             self.results_np = result if self.results_np is None else np.vstack((self.results_np, result))
             self.results_filtered_np= filtered_state_x if self.results_filtered_np is None else np.vstack((self.results_filtered_np, filtered_state_x))
-        
-        self.pf = ParticleFilter(
-            num_particles=1000,
-            state_dim=15,
-        )
 
     def process_data(self, directory, camera_matrix, dist_coeffs, tag_corners_world):
         """Processes all .mat files in the given directory and estimates pose."""
         estimated_positions = []
-        estimated_orientations = []
-        true_positions = []
+        estimated        # self.pf = ParticleFilter(
+        #     num_particles=1000,
+        #     state_dim=15,
+        # )
         true_orientations = []
 
         # List all MAT files in the folder
