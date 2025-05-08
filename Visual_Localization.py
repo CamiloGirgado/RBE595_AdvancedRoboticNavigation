@@ -304,7 +304,8 @@ class VisualLocalization:
         self.axs[2].set_title('Yaw Plot')    
         self.axs[2].legend()
         plt.subplots_adjust(wspace=0.4, hspace=0.6) # Adjust values as needed
-        
+        plt.show()
+
         # # Show the plot
         # if self.ukf_or_particle_filter != "UKF":
         #     self.fig.savefig(f"./plots/{self.ukf_or_particle_filter}_{self.particle_count}_{self.file}_orientation_plot.png", dpi=300, bbox_inches='tight')    
