@@ -72,7 +72,7 @@ class ParticleFilter:
             self.num_particles, size=self.num_particles, p=self.weights
         )
         self.particles = self.particles[indices]
-        self.weights = np.ones(self.num_particles) / self.num_particles
+        # self.weights = np.ones(self.num_particles) / self.num_particles
 
     def estimate(self):
         all = np.average(self.particles, weights=self.weights, axis=0)

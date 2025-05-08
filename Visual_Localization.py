@@ -30,6 +30,17 @@ class VisualLocalization:
         # self.true_positions = None
         self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
 
+    def loadMatlabData(self,file_name):
+        """
+        Load MATLAB data file.
+        :param file_name: Name of the MATLAB file to load.
+        :return: Loaded data.
+        """
+        mat_fname = pjoin(self.data_dir, file_name)
+        self.mat_contents = sio.loadmat(mat_fname, simplify_cells=True)
+        self.actual_vicon_np = np.vstack((self.mat_contents['vicon'], np.array([self.mat_contents['time']])))
+        return self.mat_contents
+    
     def run_UKF(self):
         observationModel_1 = observationModel()
         position = None
@@ -166,7 +177,7 @@ class VisualLocalization:
                     #estimated_positions.append(position)
                     #estimated_orientations.append(orientation)
             break
-        return estimated_all, np.array(true_positions), np.array(true_orientations)
+        return estimated_all
 
     def plot_trajectory(self):
         self.__plot_trajectory_vicon__()
@@ -174,28 +185,26 @@ class VisualLocalization:
         self.__plot_trajectory_estimated_filtered__()
 
     def __plot_trajectory_vicon__(self):
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
         
-        x = self.true_positions[0, :]
-        y = self.true_positions[1, :]
-        z = self.true_positions[2, :]
+        x = self.actual_vicon_np[0, :]
+        y = self.actual_vicon_np[1, :]
+        z = self.actual_vicon_np[2, :]
 
         # Plot the trajectory
-        fig = plt.figure(figsize=(12, 8))
-        ax = fig.add_subplot(111, projection='3d')
+        self.fig = plt.figure(figsize=(12, 8))
+        self.ax = self.fig.add_subplot(111, projection='3d')
 
         # Plot the trajectory
-        ax.plot(x, y, z, label='Actual', color='b', linewidth=2)  # Set color and linewidth for better visibility
+        self.ax.plot(x, y, z, label='Actual', color='b', linewidth=2)  # Set color and linewidth for better visibility
 
         # ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
         # ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
-        ax.legend()
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
+        self.ax.legend()
+        self.ax.set_xlabel('X')
+        self.ax.set_ylabel('Y')
+        self.ax.set_zlabel('Z')
         plt.title('Trajectory Comparison')
-        plt.show()
+
     
     def __plot_trajectory_estimated__(self):
         x = self.results_np.T.squeeze()[0,:]
