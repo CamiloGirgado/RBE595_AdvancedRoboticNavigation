@@ -286,7 +286,7 @@ class VisualLocalization:
         self.axs[1].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[4,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
         self.axs[1].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[4,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
 
-        self.axs[2].plot(x, yaw, label='Actresults_filtered_npual', color='b', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[2].plot(x, yaw, label='Actual_results_filtered_np', color='b', linewidth=1)  # Set color and linewidth for better visibility
         self.axs[2].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[5,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
         self.axs[2].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[5,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
         
@@ -305,7 +305,7 @@ class VisualLocalization:
         self.axs[2].legend()
         plt.subplots_adjust(wspace=0.4, hspace=0.6) # Adjust values as needed
         
-        # Show the plot
+        # # Show the plot
         # if self.ukf_or_particle_filter != "UKF":
         #     self.fig.savefig(f"./plots/{self.ukf_or_particle_filter}_{self.particle_count}_{self.file}_orientation_plot.png", dpi=300, bbox_inches='tight')    
         # else:

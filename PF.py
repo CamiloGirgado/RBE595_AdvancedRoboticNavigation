@@ -122,11 +122,6 @@ class ParticleFilter:
         Rq_matrix = self.Rq_matrix(x[3:6])
         xout[6:9] = (Rq_matrix @ U_a + g).squeeze()
         
-
-
-
-
-
         return xout
     
     def Rq_matrix(self, rpy):
