@@ -1,6 +1,5 @@
 import numpy as np
-import cv2
-import scipy.io
+import scipy.io as sio
 import matplotlib.pyplot as plt
 import os
 from matlab_data import matlab_data
@@ -10,13 +9,14 @@ from PF import ParticleFilter
 
 class VisualLocalization:
     def __init__(self, file):
-        # self.mat_contents = None
         self.data = matlab_data(file).get_data()
+        # self.mat_contents = None
         self.actual_vicon_np = None
         self.results_np = None
         self.actual_vicon_aligned_np = None
         self.diff_matrix = None
         self.cov_matrix = None
+        self.loadMatlabData(file)
         self.file = file
         self.ukf_or_particle_filter = "UKF"
         self.particle_count = 0
@@ -28,14 +28,9 @@ class VisualLocalization:
         self.fig = None
         self.axs = None
         # self.true_positions = None
-        self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
+        # self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
 
     def loadMatlabData(self,file_name):
-        """
-        Load MATLAB data file.
-        :param file_name: Name of the MATLAB file to load.
-        :return: Loaded data.
-        """
         mat_fname = pjoin(self.data_dir, file_name)
         self.mat_contents = sio.loadmat(mat_fname, simplify_cells=True)
         self.actual_vicon_np = np.vstack((self.mat_contents['vicon'], np.array([self.mat_contents['time']])))
@@ -107,7 +102,7 @@ class VisualLocalization:
                 print("Warning: Pose estimation failed for the current data item. Skipping this item.")
                 continue  # Skip this item if pose estimation failed
             dt = data['t'] - time_last
-            if time_last == 0. and not is_initialized:
+            if not is_initialized:
                 dt = 0.001
                 self.pf.particles[:,0:3] = np.tile(position.reshape(3,1), self.pf.num_particles).T
                 self.pf.particles[:,3:6] = np.tile(orientation.reshape(3,1), self.pf.num_particles).T
@@ -128,10 +123,6 @@ class VisualLocalization:
             self.results_np = result if self.results_np is None else np.vstack((self.results_np, result))
             self.results_filtered_np= filtered_state_x if self.results_filtered_np is None else np.vstack((self.results_filtered_np, filtered_state_x))
         
-        self.pf = ParticleFilter(
-            num_particles=1000,
-            state_dim=15,
-        )
 
     def process_data(self, directory, camera_matrix, dist_coeffs, tag_corners_world):
         """Processes all .mat files in the given directory and estimates pose."""
@@ -286,7 +277,7 @@ class VisualLocalization:
         self.axs[1].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[4,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
         self.axs[1].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[4,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
 
-        self.axs[2].plot(x, yaw, label='Actresults_filtered_npual', color='b', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[2].plot(x, yaw, label='Actual results_filtered_', color='b', linewidth=1)  # Set color and linewidth for better visibility
         self.axs[2].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[5,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
         self.axs[2].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[5,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
         
@@ -341,7 +332,7 @@ class VisualLocalization:
 
 
     def compute_covariance(estimated_all, true_positions, true_orientations):
-        """Computes the covariance matrix of the observation noise."""
+        # Computes the covariance matrix of the observation noise.
 
         true_data = np.vstack((true_positions, true_orientations))
 
@@ -440,5 +431,5 @@ class VisualLocalization:
             # print("RMSE of Filtered: ", rmse_filtered)
             rmse_difference = rmse_measurement_model - rmse_filtered
             print("RMSE difference: ", rmse_difference)
-            return rmse_difference
+            return rmse_difference, rmse_measurement_model
 
