@@ -18,7 +18,7 @@ class VisualLocalization:
         self.cov_matrix = None
         self.loadMatlabData(file)
         self.file = file
-        self.ukf_or_particle_filter = "UKF"
+        # self.ukf_or_particle_filter = "UKF"
         self.particle_count = 0
         self.pf = None
         self.results_filtered_np = None
@@ -127,8 +127,10 @@ class VisualLocalization:
     def process_data(self, directory, camera_matrix, dist_coeffs, tag_corners_world):
         """Processes all .mat files in the given directory and estimates pose."""
         estimated_positions = []
-        estimated_orientations = []
-        true_positions = []
+        estimated        # self.pf = ParticleFilter(
+        #     num_particles=1000,
+        #     state_dim=15,
+        # )
         true_orientations = []
 
         # List all MAT files in the folder
@@ -295,8 +297,9 @@ class VisualLocalization:
         self.axs[2].set_title('Yaw Plot')    
         self.axs[2].legend()
         plt.subplots_adjust(wspace=0.4, hspace=0.6) # Adjust values as needed
-        
-        # Show the plot
+        plt.show()
+
+        # # Show the plot
         # if self.ukf_or_particle_filter != "UKF":
         #     self.fig.savefig(f"./plots/{self.ukf_or_particle_filter}_{self.particle_count}_{self.file}_orientation_plot.png", dpi=300, bbox_inches='tight')    
         # else:
