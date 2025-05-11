@@ -30,11 +30,11 @@ class VisualLocalization:
         # self.true_positions = None
         # self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
 
-    def loadMatlabData(self,file_name):
-        mat_fname = pjoin(self.data_dir, file_name)
-        self.mat_contents = sio.loadmat(mat_fname, simplify_cells=True)
-        self.actual_vicon_np = np.vstack((self.mat_contents['vicon'], np.array([self.mat_contents['time']])))
-        return self.mat_contents
+    # def loadMatlabData(self,file_name):
+    #     mat_fname = pjoin(self.data_dir, file_name)
+    #     self.mat_contents = sio.loadmat(mat_fname, simplify_cells=True)
+    #     self.actual_vicon_np = np.vstack((self.mat_contents['vicon'], np.array([self.mat_contents['time']])))
+    #     return self.mat_contents
     
     def run_UKF(self):
         observationModel_1 = observationModel()
@@ -125,12 +125,8 @@ class VisualLocalization:
         
 
     def process_data(self, directory, camera_matrix, dist_coeffs, tag_corners_world):
-        """Processes all .mat files in the given directory and estimates pose."""
         estimated_positions = []
-        estimated        # self.pf = ParticleFilter(
-        #     num_particles=1000,
-        #     state_dim=15,
-        # )
+        estimated_orientations = []
         true_orientations = []
 
         # List all MAT files in the folder
@@ -143,7 +139,7 @@ class VisualLocalization:
         for file_name in mat_files:
             file_path = os.path.join(directory, file_name)
             print(f"Loading file: {file_name}")
-            data = scipy.io.loadmat(file_path, simplify_cells=True)
+            data = sio.io.loadmat(file_path, simplify_cells=True)
             # Debugging: Print the structure of the .mat file
             print(f"Structure of {file_name}:", data.keys())
             if 'data' not in data or 'time' not in data or 'vicon' not in data:
@@ -178,7 +174,6 @@ class VisualLocalization:
         self.__plot_trajectory_estimated_filtered__()
 
     def __plot_trajectory_vicon__(self):
-        
         x = self.actual_vicon_np[0, :]
         y = self.actual_vicon_np[1, :]
         z = self.actual_vicon_np[2, :]
@@ -307,12 +302,12 @@ class VisualLocalization:
         # plt.close(self.fig)
 
     def interpolate(self, time_target, t1, t2,y1, y2):
-        """Interpolate between two points."""
+        # Interpolate between two points.
         interpolated_data = y1 + ((time_target - t1) * (y2 - y1) / (t2 - t1))
         return interpolated_data
     
     def interpolate_data(estimated_all, true_positions):
-        """Interpolate estimated data to align with true positions."""
+        # Interpolate estimated data to align with true positions."""
         if estimated_all is None or len(estimated_all) == 0:
             return None
 
