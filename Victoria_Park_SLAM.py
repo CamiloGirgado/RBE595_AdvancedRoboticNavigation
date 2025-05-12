@@ -1,72 +1,90 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from math import sin, cos, tan, atan2
+from sklearn.metrics import mean_squared_error
 
-# Vehicle geometry
-L = 2.83  # wheelbase in meters
+# Assuming EKF SLAM setup, motion model, and measurements already implemented as discussed
 
-# Load and resample data
-file_path = r"C:\Users\camil\Documents\WPI\RBE595-ARN\Assignment 4\victoria_park.csv"
-data_in = pd.read_csv(file_path, index_col=0)
+# Read and preprocess the data
+data_in = pd.read_csv('victoria_park.csv', index_col=0)
 data_in.index = pd.to_timedelta(data_in.index, unit='s')
 data_in = data_in.resample('1s').mean()
 
-# Extract input measurements
-steering = np.deg2rad(data_in['steering'].values)  # convert degrees to radians
-speed = data_in['speed'].values
-laser_scans = data_in.filter(like='laser').values
+# Extract relevant columns
+time = data_in.index.total_seconds()
+speed = data_in['speed']
+steering = data_in['steering_angle']
+lat = data_in['latitude']
+lon = data_in['longitude']
+lidar_x = data_in.filter(regex='laser_x')
 
-# Initial state
-x = np.array([0.0, 0.0, 0.0])  # [x, y, yaw]
-trajectory = [x.copy()]
+# Assuming ground truth is in local Cartesian coordinates as x and y
+x_gt = data_in['x_position']  # Ground truth x-position
+y_gt = data_in['y_position']  # Ground truth y-position
 
-# Motion model
+# Initialize EKF SLAM parameters, state, covariance, etc.
 
-def motion_model(x, v, delta, dt):
-    x_pos, y_pos, yaw = x
-    dx = v * cos(yaw) * dt
-    dy = v * sin(yaw) * dt
-    dtheta = (v / L) * tan(delta) * dt
-    return np.array([x_pos + dx, y_pos + dy, yaw + dtheta])
+# Vehicle State (x, y, yaw)
+state = np.zeros(3)  # [x, y, yaw]
+P = np.eye(3)  # Initial state covariance
 
-# Process all data
-dt = 1.0  # 1Hz after resampling
-for i in range(len(speed)):
-    v = speed[i]
-    delta = steering[i]
-    x = motion_model(x, v, delta, dt)
-    trajectory.append(x.copy())
+# For demonstration, assume landmarks and lidar data processed elsewhere
+# You would include prediction and update steps as per EKF SLAM process
 
-trajectory = np.array(trajectory)
+# Initialize lists for storing estimated positions
+x_est = []
+y_est = []
 
-# Simple landmark extraction from laser scans (peaks within range)
-def extract_landmarks(scan_row):
-    angles = np.linspace(-np.pi/2, np.pi/2, len(scan_row))
-    landmarks = []
-    for r, theta in zip(scan_row, angles):
-        if 0.5 < r < 80.0:
-            lx = r * np.cos(theta)
-            ly = r * np.sin(theta)
-            landmarks.append([lx, ly])
-    return np.array(landmarks)
+# Run the EKF loop (simplified version here)
+for t in range(1, len(time)):
+    # Predict step
+    v = speed[t]  # linear velocity
+    delta = steering[t]  # steering angle
+    dt = time[t] - time[t-1]  # time step
+    
+    # Apply motion model (simple example)
+    x = state[0] + v * np.cos(state[2]) * dt
+    y = state[1] + v * np.sin(state[2]) * dt
+    yaw = state[2] + (v / 2.83) * np.tan(delta) * dt  # L=2.83m for vehicle model
+    
+    state = np.array([x, y, yaw])  # Updated state
+    
+    # Store estimated positions
+    x_est.append(x)
+    y_est.append(y)
+    
+    # Update step (would use lidar and GPS measurements here)
 
-# Example: Extract landmarks from one scan
-sample_landmarks = extract_landmarks(laser_scans[100])
+# Convert to numpy arrays for easier processing
+x_est = np.array(x_est)
+y_est = np.array(y_est)
 
-# Transform sample landmarks to world frame
-x_pos, y_pos, yaw = trajectory[100]
-R = np.array([[cos(yaw), -sin(yaw)], [sin(yaw), cos(yaw)]])
-transformed_landmarks = (R @ sample_landmarks.T).T + np.array([x_pos, y_pos])
+# Calculate RMSE (Root Mean Square Error) in both x and y directions
+rmse_x = np.sqrt(mean_squared_error(x_gt, x_est))
+rmse_y = np.sqrt(mean_squared_error(y_gt, y_est))
 
-# Plot
-plt.figure(figsize=(10, 10))
-plt.plot(trajectory[:, 0], trajectory[:, 1], label='Vehicle Path')
-plt.scatter(transformed_landmarks[:, 0], transformed_landmarks[:, 1], c='red', s=10, label='Landmarks')
-plt.axis('equal')
-plt.xlabel('X [m]')
-plt.ylabel('Y [m]')
-plt.title('Victoria Park SLAM (Odometry + Landmark Extraction)')
+print(f"RMSE in X: {rmse_x:.2f} meters")
+print(f"RMSE in Y: {rmse_y:.2f} meters")
+
+# Plot the results
+plt.figure(figsize=(10, 8))
+plt.plot(x_gt, y_gt, label="Ground Truth", color='blue')
+plt.plot(x_est, y_est, label="EKF Estimated", color='red')
+plt.xlabel('X Position (meters)')
+plt.ylabel('Y Position (meters)')
+plt.title('Vehicle Trajectory: Ground Truth vs EKF Estimated')
 plt.legend()
-plt.grid()
+plt.grid(True)
+plt.show()
+
+# Plot landmarks (if applicable)
+# Assuming landmarks are stored in a list or array as (x, y) positions
+landmarks = np.array([[-20, 30], [50, 100], [100, -50]])  # Example landmarks
+
+plt.scatter(landmarks[:, 0], landmarks[:, 1], s=5, c='green', alpha=0.5, label='Landmarks')
+plt.xlabel('X Position (meters)')
+plt.ylabel('Y Position (meters)')
+plt.title('Map of Landmarks')
+plt.legend()
+plt.grid(True)
 plt.show()
