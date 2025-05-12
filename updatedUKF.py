@@ -10,9 +10,9 @@ from numpy.random import randn
 
 
 class UkfFilter2:
-    def __init__(self, measurement_data):
+    def __init__(self, model):
         self.debug = False
-        self.measurement_data = measurement_data
+        self.observationModel_1 = model
         self.R = None
         self.n_states = 15
         self.n_measurements = 6
@@ -26,6 +26,7 @@ class UkfFilter2:
         self.Q[4,4]=0.02
         self.Q[5,5]=0.02
         self.check_covariance_matrix(self.Q)
+        self.P = np.eye(self.n_states)*0.01
         self.H = np.array([[1, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -71,7 +72,7 @@ class UkfFilter2:
         # print("Sigma points: ", points)
         # State
         self.x = np.zeros(self.n)
-        self.P = np.eye(self.n)
+        # self.P = np.eye(self.n)
 
     def julier_sigma_points(self,mu, Sigma, alpha=1e-3, beta=2, kappa=0):
         n = mu.shape[0]
@@ -128,7 +129,8 @@ class UkfFilter2:
         self.x = np.sum(self.Wm[:, None] * propagated, axis=0)
         self.P = self.Q.copy()
         for i in range(2 * self.n + 1):
-            diff = (propagated[i] - self.x).reshape(-1, 1)
+            #  diff = (propagated[i] - self.x).reshape(-1, 1)
+            diff = (propagated[i].reshape(-1, 1) - self.x.reshape(-1, 1))
             self.P += self.Wc[i] * diff @ diff.T
         self._sigma_pts_pred = propagated
         return self.x.squeeze()

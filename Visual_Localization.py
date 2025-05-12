@@ -5,6 +5,7 @@ import os
 from matlab_data import matlab_data
 from observationModel_1 import observationModel
 from UKF import UKF
+from updatedUKF import UkfFilter2
 from PF import ParticleFilter
 
 class VisualLocalization:
@@ -16,7 +17,7 @@ class VisualLocalization:
         self.actual_vicon_aligned_np = None
         self.diff_matrix = None
         self.cov_matrix = None
-        self.loadMatlabData(file)
+        # self.loadMatlabData(file)
         self.file = file
         # self.ukf_or_particle_filter = "UKF"
         self.particle_count = 0
@@ -28,7 +29,7 @@ class VisualLocalization:
         self.fig = None
         self.axs = None
         # self.true_positions = None
-        # self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
+        self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
 
     # def loadMatlabData(self,file_name):
     #     mat_fname = pjoin(self.data_dir, file_name)
@@ -39,7 +40,7 @@ class VisualLocalization:
     def run_UKF(self):
         observationModel_1 = observationModel()
         position = None
-        ukf = UKF(self.data)
+        ukf = UkfFilter2(self.data)
         self.time = []
         self.results_np = None
         self.results_filtered_np = None
@@ -68,7 +69,9 @@ class VisualLocalization:
             filtered_state_x = ukf.update(z.T)
             result = np.hstack((np.array(position).T,orientation))
             result = np.hstack((result, np.array([data['t']])))
-            filtered_state_x = np.hstack((filtered_state_x, np.array([data['t']])))
+            filtered_state_x = np.hstack((filtered_state_x, np.full((filtered_state_x.shape[0], 1), data['t'])))
+            # filtered_state_x = np.hstack((filtered_state_x, np.array([data['t']]).reshape(-1, 1)))
+            # filtered_state_x = np.hstack((filtered_state_x, np.array([data['t']])))
             # result= np.hstack((np.array(position).squeeze(),orientation,data['t']))
             self.results_np = result if self.results_np is None else np.vstack((self.results_np, result))
             self.results_filtered_np = filtered_state_x if self.results_filtered_np is None else np.vstack((self.results_filtered_np, filtered_state_x))
@@ -127,6 +130,7 @@ class VisualLocalization:
     def process_data(self, directory, camera_matrix, dist_coeffs, tag_corners_world):
         estimated_positions = []
         estimated_orientations = []
+        true_positions = []
         true_orientations = []
 
         # List all MAT files in the folder

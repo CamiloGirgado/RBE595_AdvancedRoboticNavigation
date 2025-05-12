@@ -10,7 +10,7 @@ def execute_UKF(file_name):
     rmse = .0
     vl = VisualLocalization(file_name)
     vl.run_UKF()
-    rmse = vl.rmse()
+    rmse, = vl.rmse()
     vl.plot_trajectory()  # Plot the trajectory
     vl.plot_orientation()  # Plot the roll trajectory
 
@@ -30,7 +30,7 @@ def execute_PF(file_name, particle_count = 500):
 def run_UKF():
     results = []
     # results.append(execute_UKF('data/studentdata0.mat'))
-    # results.append(execute_UKF('data/studentdata1.mat'))
+    results.append(execute_UKF('data/studentdata1.mat'))
     # results.append(execute_UKF('data/studentdata2.mat'))
     # results.append(execute_UKF('data/studentdata3.mat'))
     # results.append(execute_UKF('data/studentdata4.mat'))
@@ -42,17 +42,17 @@ def run_UKF():
 def run_PF(particle_count):
     results = []
     # results.append(execute_PF('data/studentdata0.mat'))
-    # results.append(execute_PF('data/studentdata1.mat'))
+    results.append(execute_PF('data/studentdata1.mat'))
     # results.append(execute_PF('data/studentdata2.mat'))
     # results.append(execute_PF('data/studentdata3.mat'))
     # results.append(execute_PF('data/studentdata4.mat'))
-    results.append(execute_PF('data/studentdata5.mat'))
+    # results.append(execute_PF('data/studentdata5.mat'))
     # results.append(execute_PF('data/studentdata6.mat'))
     # results.append(execute_PF('data/studentdata7.mat'))
     print("PF RMSE with Particles - {particle_count}:", sum(results)/len(results))
 
 if __name__ == "__main__":
-    # run_UKF()
+    run_UKF()
     run_PF(250)
     # run_PF(500)
     # run_PF(750)
