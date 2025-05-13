@@ -17,16 +17,40 @@ class UkfFilter2:
         self.n_states = 15
         self.n_measurements = 6
         # points = MerweScaledSigmaPoints(n=15, alpha=.1, beta=2., kappa=0)
-        
-        self.Q = np.eye(15)*0.001
-        self.Q[0,0]=0.2
-        self.Q[1,1]=0.2
-        self.Q[2,2]=0.2
-        self.Q[3,3]=0.02
-        self.Q[4,4]=0.02
-        self.Q[5,5]=0.02
+        self.R = np.diag([
+            .001, .001, .001,           # position (large if starting with vague initial pose)
+            np.deg2rad(15.0)**2,np.deg2rad(15.0)**2, np.deg2rad(15.0)**2           # orientation (low confidence)
+        ])
+        self.check_covariance_matrix(self.R)
+        self.P = np.diag([
+            1, 1, 1,           # position (large if starting with vague initial pose)
+            np.deg2rad(90.0)**2, np.deg2rad(90.0)**2, np.deg2rad(90.0)**2,           # orientation (in radians; small if initial orientation is known)
+            0.2, 0.2, 0.2,           # velocity (moderate confidence)
+            
+            0.01, 0.01, 0.01,      # gyro bias (smaller drift uncertainty if high-quality IMU)
+            0.1, 0.1, 0.1        # accel bias (usually start near zero bias with modest uncertainty)
+        ])
+        self.check_covariance_matrix(self.P)
+        self.Q = np.diag([
+            .0001, .0001, .0001,           # position (large if starting with vague initial pose)
+            np.deg2rad(5.0)**2, np.deg2rad(5.0)**2, np.deg2rad(5.0)**2,           # orientation (in radians; small if initial orientation is known)
+            .2, .2, .2,           # velocity (moderate confidence)
+            
+            0.01, 0.01, 0.01,      # gyro bias (smaller drift uncertainty if high-quality IMU)
+            0.1, 0.1, 0.1        # accel bias (usually start near zero bias with modest uncertainty)
+        ])
         self.check_covariance_matrix(self.Q)
-        self.P = np.eye(self.n_states)*0.01
+
+        # self.Q = np.eye(15)*0.001
+        # self.Q[0,0]=0.2
+        # self.Q[1,1]=0.2
+        # self.Q[2,2]=0.2
+        # self.Q[3,3]=0.02
+        # self.Q[4,4]=0.02
+        # self.Q[5,5]=0.02
+        # self.check_covariance_matrix(self.Q)
+        # self.P = np.eye(self.n_states)*0.01
+
         self.H = np.array([[1, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -36,9 +60,9 @@ class UkfFilter2:
                            ])
         
         #  The measurement mean and noise covariance
-        self.R = self.P_Matrix()
+        # self.R = self.P_Matrix()
 
-        self.check_covariance_matrix(self.R)
+        # self.check_covariance_matrix(self.R)
         
         # # Define the covariance matrices for gyroscope and accelerometer bias noise
         sigma_bg_x = 0.0025
@@ -66,36 +90,39 @@ class UkfFilter2:
         self.Wc[0] = self.Wm[0] + (1 - alpha**2 + beta)
 
 
-        mu = np.zeros(self.n_states)
-        Sigma = np.eye(self.n_states) * 0.1
-        points,_,_ = self.julier_sigma_points(mu, Sigma)
-        # print("Sigma points: ", points)
         # State
         self.x = np.zeros(self.n)
+
+        # mu = np.zeros(self.n_states)
+        # Sigma = np.eye(self.n_states) * 0.1
+        # points,_,_ = self.julier_sigma_points(mu, Sigma)
+        # # print("Sigma points: ", points)
+        # # State
+        # self.x = np.zeros(self.n)
         # self.P = np.eye(self.n)
 
-    def julier_sigma_points(self,mu, Sigma, alpha=1e-3, beta=2, kappa=0):
-        n = mu.shape[0]
-        lambda_ = alpha**2 * (n + kappa) - n
-        sigma_points = np.zeros((2 * n + 1, n))
-        weights_mean = np.zeros(2 * n + 1)
-        weights_cov = np.zeros(2 * n + 1)
+    # def julier_sigma_points(self,mu, Sigma, alpha=1e-3, beta=2, kappa=0):
+    #     n = mu.shape[0]
+    #     lambda_ = alpha**2 * (n + kappa) - n
+    #     sigma_points = np.zeros((2 * n + 1, n))
+    #     weights_mean = np.zeros(2 * n + 1)
+    #     weights_cov = np.zeros(2 * n + 1)
 
-        # Cholesky decomposition
-        sqrt_matrix = np.linalg.cholesky((n + lambda_) * Sigma)
+    #     # Cholesky decomposition
+    #     sqrt_matrix = np.linalg.cholesky((n + lambda_) * Sigma)
 
-        # Sigma points
-        sigma_points[0] = mu
-        for i in range(n):
-            sigma_points[i + 1] = mu + sqrt_matrix[:, i]
-            sigma_points[n + i + 1] = mu - sqrt_matrix[:, i]
+    #     # Sigma points
+    #     sigma_points[0] = mu
+    #     for i in range(n):
+    #         sigma_points[i + 1] = mu + sqrt_matrix[:, i]
+    #         sigma_points[n + i + 1] = mu - sqrt_matrix[:, i]
 
-        # Weights
-        weights_mean[0] = lambda_ / (n + lambda_)
-        weights_cov[0] = lambda_ / (n + lambda_) + (1 - alpha**2 + beta)
-        weights_mean[1:] = weights_cov[1:] = 1 / (2 * (n + lambda_))
+    #     # Weights
+    #     weights_mean[0] = lambda_ / (n + lambda_)
+    #     weights_cov[0] = lambda_ / (n + lambda_) + (1 - alpha**2 + beta)
+    #     weights_mean[1:] = weights_cov[1:] = 1 / (2 * (n + lambda_))
 
-        return sigma_points, weights_mean, weights_cov
+    #     return sigma_points, weights_mean, weights_cov
     
     def check_covariance_matrix(self, matrix):
         if np.allclose(matrix, matrix.T):
@@ -116,10 +143,19 @@ class UkfFilter2:
         sigma_points = np.zeros((2 * self.n + 1, self.n))
         self.x = self.x.reshape(-1,1)
         sigma_points[0] = self.x.squeeze()
-        sqrt_P = np.linalg.cholesky((self.n + self.lambda_) * self.P)
+        try:
+            sqrt_P = np.linalg.cholesky((self.n + self.lambda_) * self.P)
+        except np.linalg.LinAlgError:
+            sqrt_P = sqrtm((self.n + self.lambda_) * self.P)
+            if np.iscomplexobj(sqrt_P):
+                sqrt_P = np.real(sqrt_P)
         for i in range(self.n):
             sigma_points[i + 1] = (self.x + sqrt_P[:, i].reshape(-1,1)).squeeze()
             sigma_points[i + 1 + self.n] = (self.x - sqrt_P[:, i].reshape(-1,1)).squeeze()
+        # sqrt_P = np.linalg.cholesky((self.n + self.lambda_) * self.P)
+        # for i in range(self.n):
+        #     sigma_points[i + 1] = (self.x + sqrt_P[:, i].reshape(-1,1)).squeeze()
+        #     sigma_points[i + 1 + self.n] = (self.x - sqrt_P[:, i].reshape(-1,1)).squeeze()
             
         return sigma_points
     
@@ -127,12 +163,29 @@ class UkfFilter2:
         sigma_pts = self.generate_sigma_points()
         propagated = np.array([self.fx(pt, dt,data) for pt in sigma_pts])
         self.x = np.sum(self.Wm[:, None] * propagated, axis=0)
-        self.P = self.Q.copy()
+
+        P_pred = np.zeros((self.n, self.n))
         for i in range(2 * self.n + 1):
-            #  diff = (propagated[i] - self.x).reshape(-1, 1)
-            diff = (propagated[i].reshape(-1, 1) - self.x.reshape(-1, 1))
-            self.P += self.Wc[i] * diff @ diff.T
+            dx = propagated[i] - self.x
+            dx = dx.reshape(-1, 1)
+            P_pred += self.Wc[i] * dx @ dx.T
+
+        # Add process noise
+        P_pred += self.Q
+        
+        # Symmetrize and jitter
+        P_pred = 0.5 * (P_pred + P_pred.T)
+        P_pred += 1e-9 * np.eye(self.n)
+
+        self.P = P_pred
         self._sigma_pts_pred = propagated
+
+        # self.P = self.Q.copy()
+        # for i in range(2 * self.n + 1):
+        #     #  diff = (propagated[i] - self.x).reshape(-1, 1)
+        #     diff = (propagated[i].reshape(-1, 1) - self.x.reshape(-1, 1))
+        #     self.P += self.Wc[i] * diff @ diff.T
+        # self._sigma_pts_pred = propagated
         return self.x.squeeze()
 
     def update(self, z):
@@ -151,8 +204,14 @@ class UkfFilter2:
             Pxz += self.Wc[i] * dx @ dz.T
 
         K = Pxz @ np.linalg.inv(S)
+        # self.x = self.x.reshape(-1, 1) + K @ (z - z_pred.reshape(-1, 1))
+        # self.P = self.P - K @ S @ K.T
+        I = np.eye(self.P.shape[0])
+        P_updated = (I - K @ self.H) @ self.P @ (I - K @ self.H).T + K @ self.R @ K.T
+        P_updated = 0.5 * (P_updated + P_updated.T)  # Symmetrize
+        P_updated += 1e-9 * np.eye(P_updated.shape[0])  # Add jitter
+        self.P = P_updated
         self.x = self.x.reshape(-1, 1) + K @ (z - z_pred.reshape(-1, 1))
-        self.P = self.P - K @ S @ K.T
 
         return self.x.squeeze()
         
@@ -190,27 +249,37 @@ class UkfFilter2:
         if data.get('omg') is None or data.get('acc') is None:
             return xout
         
-        gyro_bias_prev = x[9:12]
-        accel_bias_prev = x[12:15]
-        # gyro_bias_next = gyro_bias_prev + np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qg)*dt
-        gyro_bias_next = (np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qg))*dt
-        accel_bias_next = (np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qa))*dt
-        xout[9:12] = gyro_bias_next
-        xout[12:15] = accel_bias_next
+        xout[9:12] += np.random.multivariate_normal(np.zeros(3), self.Qg) * dt
+        xout[12:15] += np.random.multivariate_normal(np.zeros(3), self.Qa) * dt
+        # gyro_bias_prev = x[9:12]
+        # accel_bias_prev = x[12:15]
+        # # gyro_bias_next = gyro_bias_prev + np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qg)*dt
+        # gyro_bias_next = (np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qg))*dt
+        # accel_bias_next = (np.random.multivariate_normal(mean=np.zeros(3), cov=self.Qa))*dt
+        # xout[9:12] = gyro_bias_next
+        # xout[12:15] = accel_bias_next
 
-        G = self.G_Matrix(x[3:6])
-        U_w = (np.array([data['omg']]) + gyro_bias_prev).T
+        rpy = x[3:6]
+        G = self.G_Matrix(rpy)
+        # G = self.G_Matrix(x[3:6])
+        U_w = (np.array([data['omg']]) ).T
+        # U_w = (np.array([data['omg']]) + gyro_bias_prev).T
         q_dot = np.linalg.inv(G) @ U_w
         xout[3:6] = q_dot.squeeze()
         
-        U_a = (np.array([data['acc']]) + accel_bias_prev ).T
+        U_a = (np.array([data['acc']]) ).T
+        # U_a = (np.array([data['acc']]) + accel_bias_prev ).T
         Rq_matrix = self.Rq_matrix(x[3:6])
         g = np.array([[0, 0, 9.81]]).T
-        xout[6:9] = (Rq_matrix.T @ U_a - g).squeeze()
+        xout[6:9] = (Rq_matrix.T @ U_a - g).squeeze()*dt
         
-        xout[0] = (x[6] * dt + x[0]) + x[9]
-        xout[1] = (x[7] * dt + x[1]) + x[10]
-        xout[2] = (x[8] * dt + x[2]) + x[11]
+        xout[0] = (x[6] * dt + x[0])
+        xout[1] = (x[7] * dt + x[1])
+        xout[2] = (x[8] * dt + x[2])
+        xout[3:6] = (xout[3:6] + np.pi) % (2 * np.pi) - np.pi
+        # xout[0] = (x[6] * dt + x[0]) + x[9]
+        # xout[1] = (x[7] * dt + x[1]) + x[10]
+        # xout[2] = (x[8] * dt + x[2]) + x[11]
         
         return xout
     
@@ -220,27 +289,27 @@ class UkfFilter2:
         return hx.T
         
     
-    def P_Matrix(self):
-        P = np.array(
-[[ 0.01248985 , 0.00179274 , 0.01191035 , 0.00812441,  0.00853663, -0.00074059],
- [ 0.00179274 , 0.00494662 , 0.00222319 , 0.00453181, -0.00188542, -0.00014287],
- [ 0.01191035 , 0.00222319 , 0.01989463,  0.00623472,  0.00840728, -0.00132054],
- [ 0.00812441 , 0.00453181 , 0.00623472 , 0.00973619,  0.00250991, -0.00037419],
- [ 0.00853663 ,-0.00188542 , 0.00840728 , 0.00250991,  0.00830289, -0.00050637],
- [-0.00074059 ,-0.00014287 ,-0.00132054, -0.00037419, -0.00050637,  0.00012994]]
-        )
-        P2 = np.diag([.008]*6)
-        P2[0,0] = 0.008
-        P2[1,1] = 0.008
-        P2[2,2] = 0.008
-        P2[3,3] = 0.008
-        P2[4,4] = 0.008
-        P2[5,5] = 0.001
-        # return P2
-        return P2
+#     def P_Matrix(self):
+#         P = np.array(
+# [[ 0.01248985 , 0.00179274 , 0.01191035 , 0.00812441,  0.00853663, -0.00074059],
+#  [ 0.00179274 , 0.00494662 , 0.00222319 , 0.00453181, -0.00188542, -0.00014287],
+#  [ 0.01191035 , 0.00222319 , 0.01989463,  0.00623472,  0.00840728, -0.00132054],
+#  [ 0.00812441 , 0.00453181 , 0.00623472 , 0.00973619,  0.00250991, -0.00037419],
+#  [ 0.00853663 ,-0.00188542 , 0.00840728 , 0.00250991,  0.00830289, -0.00050637],
+#  [-0.00074059 ,-0.00014287 ,-0.00132054, -0.00037419, -0.00050637,  0.00012994]]
+#         )
+#         P2 = np.diag([.008]*6)
+#         P2[0,0] = 0.008
+#         P2[1,1] = 0.008
+#         P2[2,2] = 0.008
+#         P2[3,3] = 0.008
+#         P2[4,4] = 0.008
+#         P2[5,5] = 0.001
+#         # return P2
+#         return P2
         
-    def Q_Matrix(self, data):
-        pass
+#     def Q_Matrix(self, data):
+#         pass
 
     def Rq_matrix(self, rpy):
         rotation_x = R.from_euler('x', rpy[0], degrees=False).as_matrix()
