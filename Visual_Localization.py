@@ -188,7 +188,7 @@ class VisualLocalization:
         self.ax = self.fig.add_subplot(111, projection='3d')
 
         # Plot the trajectory
-        self.ax.plot(x, y, z, label='Actual', color='b', linewidth=2)  # Set color and linewidth for better visibility
+        self.ax.plot(x, y, z, label='Actual', color='c', linewidth=2)  # Set color and linewidth for better visibility
 
         # ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
         # ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
@@ -205,7 +205,7 @@ class VisualLocalization:
         z = self.results_np.T.squeeze()[2,:]
         
         # Plot the trajectory
-        self.ax.plot(x, y, z, label='Estimated', color='r', linewidth=1, linestyle='-' ) 
+        self.ax.plot(x, y, z, label='Estimated', color='m', linewidth=1, linestyle='-' ) 
         self.ax.set_xlabel('X-axis')
         self.ax.set_ylabel('Y-axis')
         self.ax.set_zlabel('Z-axis')
@@ -219,7 +219,7 @@ class VisualLocalization:
         z = self.results_filtered_np.T.squeeze()[2,:]
         
         # Plot the trajectory
-        self.ax.plot(x, y, z, label='Filtered Estimate', color='green', linewidth=1, linestyle='-' )
+        self.ax.plot(x, y, z, label='Filtered Estimate', color='y', linewidth=1, linestyle='-' )
         self.ax.set_xlabel('X-axis')
         self.ax.set_ylabel('Y-axis')
         self.ax.set_zlabel('Z-axis')
@@ -271,17 +271,17 @@ class VisualLocalization:
 
         
         # Plot the trajectory
-        self.axs[0].plot(x, roll, label='Actual', color='b', linewidth=1)  # Set color and linewidth for better visibility
-        self.axs[0].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[3,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
-        self.axs[0].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[3,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[0].plot(x, roll, label='Actual', color='c', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[0].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[3,:], label='Estimated', color='m', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[0].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[3,:], label='Filtered', color='y', linewidth=1)  # Set color and linewidth for better visibility
 
-        self.axs[1].plot(x, pitch, label='Actual', color='b', linewidth=1)  # Set color and linewidth for better visibility
-        self.axs[1].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[4,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
-        self.axs[1].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[4,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[1].plot(x, pitch, label='Actual', color='c', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[1].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[4,:], label='Estimated', color='m', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[1].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[4,:], label='Filtered', color='y', linewidth=1)  # Set color and linewidth for better visibility
 
-        self.axs[2].plot(x, yaw, label='Actual results_filtered_', color='b', linewidth=1)  # Set color and linewidth for better visibility
-        self.axs[2].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[5,:], label='Estimated', color='r', linewidth=1)  # Set color and linewidth for better visibility
-        self.axs[2].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[5,:], label='Filtered', color='g', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[2].plot(x, yaw, label='Actual results_filtered_', color='c', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[2].plot(self.results_np.T.squeeze()[6,:], self.results_np.T.squeeze()[5,:], label='Estimated', color='m', linewidth=1)  # Set color and linewidth for better visibility
+        self.axs[2].plot(self.results_filtered_np.T.squeeze()[15,:], self.results_filtered_np.T.squeeze()[5,:], label='Filtered', color='y', linewidth=1)  # Set color and linewidth for better visibility
         
         # Set labels and title
         self.axs[0].set_xlabel('Time')
