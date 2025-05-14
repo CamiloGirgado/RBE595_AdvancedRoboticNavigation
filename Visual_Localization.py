@@ -30,12 +30,6 @@ class VisualLocalization:
         self.axs = None
         # self.true_positions = None
         self.actual_vicon_np = np.vstack((self.data['vicon'], np.array([self.data['time']])))
-
-    # def loadMatlabData(self,file_name):
-    #     mat_fname = pjoin(self.data_dir, file_name)
-    #     self.mat_contents = sio.loadmat(mat_fname, simplify_cells=True)
-    #     self.actual_vicon_np = np.vstack((self.mat_contents['vicon'], np.array([self.mat_contents['time']])))
-    #     return self.mat_contents
     
     def run_UKF(self):
         observationModel_1 = observationModel()
@@ -227,36 +221,6 @@ class VisualLocalization:
         self.ax.legend()
         plt.show()
 
-    # def plot_trajectory(self):
-    #     """Plots the estimated trajectory against the ground truth."""
-    #     estimated_positions = self.results_filtered_np.T.squeeze()[0:3,:]
-    #     true_positions = self.actual_vicon_np[0:3,:]
-    #     fig = plt.figure()
-    #     ax = fig.add_subplot(111, projection='3d')
-    #     ax.plot(true_positions[0, :], true_positions[1, :], true_positions[2, :], label='Ground Truth')
-    #     ax.plot(estimated_positions[:, 0], estimated_positions[:, 1], estimated_positions[:, 2], label='Estimated')
-    #     ax.legend()
-    #     ax.set_xlabel('X')
-    #     ax.set_ylabel('Y')
-    #     ax.set_zlabel('Z')
-    #     plt.title('Trajectory Comparison')
-    #     plt.show()
-
-    # def plot_euler_angles(self, estimated_orientations, true_orientations):
-    #     """Plots estimated and ground truth Euler angles."""
-    #     angles = ['Roll', 'Pitch', 'Yaw']
-    #     plt.figure()
-    #     for i in range(3):
-    #         plt.subplot(3, 1, i + 1)
-    #         # plt.plot(true_orientations[:, i].T, label='Ground Truth')
-    #         plt.plot(true_orientations[-1, :], true_orientations[i, :], label='Ground Truth')
-    #         plt.plot(estimated_orientations.T[-1, :], estimated_orientations.T[i+3, :], label='Estimated')
-    #         plt.ylabel(angles[i])
-    #         plt.legend()
-    #     plt.xlabel('Time')
-    #     plt.suptitle('Euler Angles Comparison')
-    #     plt.show()
-
     def plot_orientation(self):
         
         roll  = self.actual_vicon_np[3, :]
@@ -299,12 +263,6 @@ class VisualLocalization:
         plt.subplots_adjust(wspace=0.4, hspace=0.6) # Adjust values as needed
         plt.show()
 
-        # # Show the plot
-        # if self.ukf_or_particle_filter != "UKF":
-        #     self.fig.savefig(f"./plots/{self.ukf_or_particle_filter}_{self.particle_count}_{self.file}_orientation_plot.png", dpi=300, bbox_inches='tight')    
-        # else:
-        #     self.fig.savefig(f"./plots/{self.ukf_or_particle_filter}_{self.file}_orientation_plot.png", dpi=300, bbox_inches='tight')
-        # plt.close(self.fig)
 
     def interpolate(self, time_target, t1, t2,y1, y2):
         # Interpolate between two points.
