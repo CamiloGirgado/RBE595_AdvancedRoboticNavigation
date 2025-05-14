@@ -106,9 +106,9 @@ class ParticleFilter:
             indices = np.random.choice(
                 self.num_particles, size=self.num_particles, p=self.weights
             )
-        self.particles = self.particles[indices]
-        self.weights.fill(1.0 / self.num_particles)
-        # self.weights = np.ones(self.num_particles) / self.num_particles
+            self.particles = self.particles[indices]
+            self.weights.fill(1.0 / self.num_particles)
+            # self.weights = np.ones(self.num_particles) / self.num_particles
 
     def estimate(self):
         all = np.average(self.particles, weights=self.weights, axis=0)
@@ -178,7 +178,7 @@ class ParticleFilter:
         rotation_z = R.from_euler('z', rpy[2], degrees=False).as_matrix()
         # self.r = rotation_z @ rotation_y @ rotation_x
         r = rotation_x @ rotation_y @ rotation_z
-        return self.r
+        return r
         
     def G_Matrix(self, rpy):
         roll = rpy[0]

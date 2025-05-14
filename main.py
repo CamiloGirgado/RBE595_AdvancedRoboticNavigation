@@ -10,7 +10,7 @@ def execute_UKF(file_name):
     rmse = .0
     vl = VisualLocalization(file_name)
     vl.run_UKF()
-    rmse, = vl.rmse()
+    rmse,_ = vl.rmse()
     vl.plot_trajectory()  # Plot the trajectory
     vl.plot_orientation()  # Plot the roll trajectory
 
@@ -21,7 +21,7 @@ def execute_PF(file_name, particle_count = 500):
     rmse = .0    
     vl = VisualLocalization(file_name)
     vl.run_PF(particle_count=particle_count)
-    rmse = vl.rmse()
+    rmse,_ = vl.rmse()
     vl.plot_trajectory()  # Plot the trajectory
     vl.plot_orientation()  # Plot the roll trajectory
 

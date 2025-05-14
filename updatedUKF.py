@@ -211,9 +211,9 @@ class UkfFilter2:
         P_updated = 0.5 * (P_updated + P_updated.T)  # Symmetrize
         P_updated += 1e-9 * np.eye(P_updated.shape[0])  # Add jitter
         self.P = P_updated
-        self.x = self.x.reshape(-1, 1) + K @ (z - z_pred.reshape(-1, 1))
+        self.x = self.x + K @ (z - z_pred)
 
-        return self.x.squeeze()
+        return self.x
         
     def G_Matrix(self, rpy):
         roll = rpy[0]
