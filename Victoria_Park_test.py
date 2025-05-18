@@ -81,7 +81,7 @@ if landmarks.shape[0] > 0 and landmarks.ndim == 2:
 
 plt.xlabel('X [m]')
 plt.ylabel('Y [m]')
-plt.title('EKF SLAM - Victoria Park (Camera Offset Included)')
+plt.title('EKF SLAM - Victoria Park')
 plt.legend()
 plt.axis('equal')
 plt.grid()
